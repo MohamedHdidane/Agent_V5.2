@@ -47,7 +47,7 @@ class LoadDllCommand(CommandBase):
     argument_class = LoadDllArguments
     attributes = CommandAttributes(
         supported_python_versions=["Python 3.8"],
-        supported_os=[SupportedOS.Windows],
+        supported_os=[ SupportedOS.Windows ],
     )
 
     async def create_tasking(self, task: MythicTask) -> MythicTask:
