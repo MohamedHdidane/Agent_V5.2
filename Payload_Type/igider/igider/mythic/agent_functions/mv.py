@@ -1,6 +1,5 @@
 from mythic_container.MythicCommandBase import *
 from mythic_container.MythicRPC import *
-import json
 
 class MvArguments(TaskArguments):
     def __init__(self, command_line, **kwargs):

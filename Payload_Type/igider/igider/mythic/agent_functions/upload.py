@@ -1,6 +1,6 @@
 from mythic_container.MythicCommandBase import *
 from mythic_container.MythicRPC import *
-import json, sys, base64
+import sys
 
 
 class UploadArguments(TaskArguments):

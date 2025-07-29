@@ -1,6 +1,5 @@
     def kill(self, task_id, process_id):
         import ctypes, ctypes.wintypes
-        from ctypes import GetLastError
 
         NTSTATUS = ctypes.wintypes.LONG
 

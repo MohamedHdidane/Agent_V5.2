@@ -1,8 +1,6 @@
 from mythic_container.MythicCommandBase import *
 from mythic_container.MythicRPC import *
-import json
 import sys
-import base64
 
 class LoadModuleArguments(TaskArguments):
     def __init__(self, command_line, **kwargs):

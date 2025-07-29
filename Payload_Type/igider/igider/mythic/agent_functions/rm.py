@@ -1,7 +1,6 @@
 from mythic_container.MythicCommandBase import *
 import json
 from mythic_container.MythicRPC import *
-import sys
 
 
 class RmArguments(TaskArguments):

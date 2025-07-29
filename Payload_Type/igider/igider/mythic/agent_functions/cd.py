@@ -1,7 +1,5 @@
 from mythic_container.MythicCommandBase import *
 from mythic_container.MythicRPC import *
-import json
-import sys
 
 
 class CdArguments(TaskArguments):

@@ -1,7 +1,5 @@
 from mythic_container.MythicCommandBase import *
-import json, re
 from mythic_container.MythicRPC import *
-import sys
 
 
 class EvalArguments(TaskArguments):

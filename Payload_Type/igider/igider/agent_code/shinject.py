@@ -1,5 +1,5 @@
     def shinject(self, task_id, shellcode, process_id):
-        from ctypes import windll,c_int,byref,c_ulong
+        from ctypes import windll,byref,c_ulong
         total_chunks = 1
         chunk_num = 0
         sc = b""

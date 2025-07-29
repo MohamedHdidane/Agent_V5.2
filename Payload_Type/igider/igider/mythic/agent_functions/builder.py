@@ -4,24 +4,17 @@ from mythic_container.MythicRPC import *
 from .features.obfuscation import basic_obfuscate, advanced_obfuscate
 from .features.evasion import add_evasion_features
 from .features.compression import compress_code, create_one_liner
-import asyncio
 import pathlib
 import os
 import tempfile
 import base64
-import hashlib
 import json
-import random
-import string
 import logging
-from typing import Dict, Any, List, Optional
-from itertools import cycle
-import datetime
+from typing import Dict, Any
 import textwrap
 import tempfile
 import subprocess
 import sys
-import shutil
 import re
 from collections import OrderedDict
 

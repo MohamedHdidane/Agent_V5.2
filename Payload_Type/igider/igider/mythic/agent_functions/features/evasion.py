@@ -3,8 +3,8 @@ def add_evasion_features(code: str, kill_date: str = "") -> str:
 
     if kill_date:
         evasion_code.append(f"""
-import datetime
-if datetime.datetime.now() > datetime.datetime.strptime("{kill_date}", "%Y-%m-%d"):
+from datetime import datetime
+if datetime.now() > datetime.strptime("{kill_date}", "%Y-%m-%d"):
     import sys
     sys.exit(0)
 """)

@@ -1,5 +1,5 @@
     def Adv_socks(self, task_id, action, port):
-        import socket, select, queue, asyncio
+        import socket, select, queue
         from threading import Thread, active_count, Lock
         from struct import pack, unpack
         from collections import defaultdict

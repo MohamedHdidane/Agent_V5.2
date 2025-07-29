@@ -1,8 +1,7 @@
     def list_dlls(self, task_id, process_id=0):
         import sys, os.path, ctypes, ctypes.wintypes
-        from ctypes import create_unicode_buffer, GetLastError
-        import re
-        import datetime
+        import re , json
+    
 
         def _check_bool(result, func, args):
             if not result:
