@@ -205,7 +205,6 @@ class AES:
 
 class igider:
     def encrypt(self, data):
-        from hmac import new
         if self.agent_config["enc_key"]["value"] == "aes256_hmac" and len(data)>0:
             key = base64.b64decode(self.agent_config["enc_key"]["enc_key"])
             iv = os.urandom(16)
