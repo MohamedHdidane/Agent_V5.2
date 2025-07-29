@@ -1,12 +1,12 @@
     def ps_full(self, task_id):
-        import sys, os.path, ctypes, ctypes.wintypes
-        from ctypes import create_unicode_buffer, GetLastError
-
+        
         def _check_bool(result, func, args):
             if not result:
-                raise ctypes.WinError(ctypes.get_last_error())
+                error_code = ctypes.get_last_error()
+                raise ctypes.WinError(error_code)
             return args
 
+        # Type definitions
         PULONG = ctypes.POINTER(ctypes.wintypes.ULONG)
         ULONG_PTR = ctypes.wintypes.LPVOID
         SIZE_T = ctypes.c_size_t
@@ -14,30 +14,38 @@
         PVOID = ctypes.wintypes.LPVOID
         PROCESSINFOCLASS = ctypes.wintypes.ULONG
 
-        Psapi = ctypes.WinDLL('Psapi.dll')
-        EnumProcesses = Psapi.EnumProcesses
-        EnumProcesses.restype = ctypes.wintypes.BOOL
+        
+        try:
+            Psapi = ctypes.WinDLL('Psapi.dll')
+            EnumProcesses = Psapi.EnumProcesses
+            EnumProcesses.restype = ctypes.wintypes.BOOL
+        except Exception as e:
+            return {"processes": []}
 
-        Kernel32 = ctypes.WinDLL('kernel32.dll')
-        OpenProcess = Kernel32.OpenProcess
-        OpenProcess.restype = ctypes.wintypes.HANDLE
-        CloseHandle = Kernel32.CloseHandle
-        CloseHandle.errcheck = _check_bool
-        IsWow64Process = Kernel32.IsWow64Process
+        try:
+            Kernel32 = ctypes.WinDLL('kernel32.dll')
+            OpenProcess = Kernel32.OpenProcess
+            OpenProcess.restype = ctypes.wintypes.HANDLE
+            CloseHandle = Kernel32.CloseHandle
+            CloseHandle.errcheck = _check_bool
+            IsWow64Process = Kernel32.IsWow64Process
+            
+            GetCurrentProcess = Kernel32.GetCurrentProcess
+            GetCurrentProcess.restype = ctypes.wintypes.HANDLE
+            GetCurrentProcess.argtypes = ()
 
-        GetCurrentProcess = Kernel32.GetCurrentProcess
-        GetCurrentProcess.restype = ctypes.wintypes.HANDLE
-        GetCurrentProcess.argtypes = ()
+            ReadProcessMemory = Kernel32.ReadProcessMemory
+            ReadProcessMemory.errcheck = _check_bool
+            ReadProcessMemory.argtypes = (
+                ctypes.wintypes.HANDLE, 
+                ctypes.wintypes.LPCVOID,
+                ctypes.wintypes.LPVOID, 
+                SIZE_T,           
+                ctypes.POINTER(SIZE_T))
+        except Exception as e:
+            return {"processes": []}
 
-        ReadProcessMemory = Kernel32.ReadProcessMemory
-        ReadProcessMemory.errcheck = _check_bool
-        ReadProcessMemory.argtypes = (
-            ctypes.wintypes.HANDLE, 
-            ctypes.wintypes.LPCVOID,
-            ctypes.wintypes.LPVOID, 
-            SIZE_T,           
-            ctypes.POINTER(SIZE_T))
-
+        # Constants
         MAX_PATH = 260
         PROCESS_VM_READ           = 0x0010
         PROCESS_QUERY_INFORMATION = 0x0400
@@ -72,17 +80,28 @@
                 if simple and size is not None:
                     if dtype._type_ == ctypes.wintypes.WCHAR._type_:
                         buf = (ctypes.wintypes.WCHAR * (size // 2))()
-                    else: buf = (ctypes.c_char * size)()
-                else: buf = dtype()
+                    else: 
+                        buf = (ctypes.c_char * size)()
+                else: 
+                    buf = dtype()
                 nread = SIZE_T()
-                Kernel32.ReadProcessMemory(handle, address, ctypes.byref(buf), \
-                        ctypes.sizeof(buf), ctypes.byref(nread))
-                if simple: return buf.value
+                
+                try:
+                    Kernel32.ReadProcessMemory(handle, address, ctypes.byref(buf), 
+                            ctypes.sizeof(buf), ctypes.byref(nread))
+                except Exception as e:
+                    if simple:
+                        return ""
+                    return buf
+                    
+                if simple: 
+                    return buf.value
                 return buf
 
         _remote_pointer_cache = {}
         def RPOINTER(dtype):
-            if dtype in _remote_pointer_cache: return _remote_pointer_cache[dtype]
+            if dtype in _remote_pointer_cache: 
+                return _remote_pointer_cache[dtype]
             name = 'RP_%s' % dtype.__name__
             ptype = type(name, (RemotePointer,), {'_type_': dtype})
             _remote_pointer_cache[dtype] = ptype
@@ -90,6 +109,7 @@
 
         RPWSTR = RPOINTER(ctypes.wintypes.WCHAR)
 
+        # Structure definitions
         class UNICODE_STRING(ctypes.Structure):
             _fields_ = (('Length',        ctypes.wintypes.USHORT),
                         ('MaximumLength', ctypes.wintypes.USHORT),
@@ -140,10 +160,9 @@
                         ('PebBaseAddress',  RPPEB),
                         ('Reserved2',       PVOID * 2),
                         ('UniqueProcessId', ULONG_PTR),
-                        ('InheritedFromUniqueProcessId',       ULONG_PTR))
+                        ('InheritedFromUniqueProcessId', ULONG_PTR))
 
         def NtError(status):
-            import sys
             descr = 'NTSTATUS(%#08x) ' % (status % 2**32,)
             if status & 0xC0000000 == 0xC0000000:
                 descr += '[Error]'
@@ -157,15 +176,18 @@
                 return WindowsError(status, descr)
             return OSError(None, descr, None, status)
 
-        ntdll = ctypes.WinDLL('ntdll.dll')
-        NtQueryInformationProcess = ntdll.NtQueryInformationProcess
-        NtQueryInformationProcess.restype = NTSTATUS
-        NtQueryInformationProcess.argtypes = (
-            ctypes.wintypes.HANDLE,
-            PROCESSINFOCLASS, 
-            PVOID,            
-            ctypes.wintypes.ULONG,
-            PULONG)        
+        try:
+            ntdll = ctypes.WinDLL('ntdll.dll')
+            NtQueryInformationProcess = ntdll.NtQueryInformationProcess
+            NtQueryInformationProcess.restype = NTSTATUS
+            NtQueryInformationProcess.argtypes = (
+                ctypes.wintypes.HANDLE,
+                PROCESSINFOCLASS, 
+                PVOID,            
+                ctypes.wintypes.ULONG,
+                PULONG)
+        except Exception as e:
+            return {"processes": []}
 
         class ProcessInformation(object):
             _close_handle = False
@@ -173,41 +195,64 @@
             _module_names = None
 
             def __init__(self, process_id=None, handle=None):
+                self._process_id = process_id
+                self._parent_process_id = None
+                self._peb = None
+                self._params = None
+                self._arch = "unknown"
+                
                 if process_id is None and handle is None:
                     handle = GetCurrentProcess()
                 elif handle is None:
-                    handle = OpenProcess(PROCESS_VM_READ | 
-                                            PROCESS_QUERY_INFORMATION,
-                                                False, process_id)
-                    self._close_handle = True
+                    try:
+                        handle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION,
+                                            False, process_id)
+                        self._close_handle = True
+                    except Exception as e:
+                        return
+                        
                 self._handle = handle
-                if not self._query_info() or (process_id is not None \
-                    and self._process_id != process_id):
+                
+                try:
+                    if not self._query_info():
+                        return
+                    if (process_id is not None and self._process_id != process_id):
+                        return
+                except Exception as e:
                     return
 
             def __del__(self, CloseHandle=CloseHandle):
                 if self._close_handle and not self._closed:
                     try:
                         CloseHandle(self._handle)
-                    except WindowsError as e: pass
+                    except WindowsError as e: 
+                        return
                     self._closed = True
 
             def _query_info(self):
                 info = PROCESS_BASIC_INFORMATION()
                 handle = self._handle
-                status = NtQueryInformationProcess(handle, ProcessBasicInformation,
-                            ctypes.byref(info), ctypes.sizeof(info), None)
-                if status < 0:
+                
+                try:
+                    status = NtQueryInformationProcess(handle, ProcessBasicInformation,
+                                ctypes.byref(info), ctypes.sizeof(info), None)
+                    if status < 0:
+                        return False
+
+                    self._process_id = info.UniqueProcessId
+                    self._parent_process_id = info.InheritedFromUniqueProcessId
+                    
+                    self._peb = peb = info.PebBaseAddress[0, handle]
+                    
+                    self._params = peb.ProcessParameters[0, handle]
+
+                    Is64Bit = ctypes.c_int32()
+                    IsWow64Process(handle, ctypes.byref(Is64Bit))
+                    self._arch = "x86" if Is64Bit.value else "x64"
+                    
+                    return True
+                except Exception as e:
                     return False
-
-                self._process_id = info.UniqueProcessId
-                self._parent_process_id = info.InheritedFromUniqueProcessId
-                self._peb = peb = info.PebBaseAddress[0, handle]
-                self._params = peb.ProcessParameters[0, handle]
-
-                Is64Bit = ctypes.c_int32()
-                IsWow64Process(handle, ctypes.byref(Is64Bit))
-                self._arch = "x86" if Is64Bit.value else "x64"
 
             @property
             def process_id(self):
@@ -215,51 +260,109 @@
 
             @property
             def session_id(self):
-                return self._peb.SessionId
+                try:
+                    return self._peb.SessionId if self._peb else 0
+                except:
+                    return 0
 
             @property
             def image_path(self):
-                ustr = self._params.ImagePathName
-                return ustr.Buffer[0, self._handle, ustr.Length]
+                try:
+                    if not self._params:
+                        return ""
+                    ustr = self._params.ImagePathName
+                    return ustr.Buffer[0, self._handle, ustr.Length]
+                except Exception as e:
+                    return ""
 
             @property
             def command_line(self):
-                ustr = self._params.CommandLine
-                buf = ustr.Buffer[0, self._handle, ustr.Length]
-                return buf
+                try:
+                    if not self._params:
+                        return ""
+                    ustr = self._params.CommandLine
+                    buf = ustr.Buffer[0, self._handle, ustr.Length]
+                    return buf
+                except Exception as e:
+                    return ""
 
         processes = []
 
         count = 32
-        while True:
+        max_iterations = 10  # Prevent infinite loop
+        iteration = 0
+        
+        while iteration < max_iterations:
+            iteration += 1
+            
             ProcessIds = (ctypes.wintypes.DWORD*count)()
             cb = ctypes.sizeof(ProcessIds)
             BytesReturned = ctypes.wintypes.DWORD()
-            if EnumProcesses(ctypes.byref(ProcessIds), cb, ctypes.byref(BytesReturned)):
-                if BytesReturned.value<cb:
-                    break
+            
+            try:
+                if EnumProcesses(ctypes.byref(ProcessIds), cb, ctypes.byref(BytesReturned)):
+                    if BytesReturned.value < cb:
+                        break
+                    else:
+                        count *= 2
                 else:
-                    count *= 2
-            else:
-                sys.exit("Call to EnumProcesses failed")
+                    error_code = ctypes.get_last_error()
+                    return {"processes": []}
+            except Exception as e:
+                return {"processes": []}
 
-        for index in range(int(BytesReturned.value / ctypes.sizeof(ctypes.wintypes.DWORD))):
+
+        process_count = int(BytesReturned.value / ctypes.sizeof(ctypes.wintypes.DWORD))
+
+        for index in range(process_count):
+            ProcessId = ProcessIds[index]
+            if ProcessId == 0: 
+                continue
+                
+            
             process = {}
-            process["process_id"] = ProcessId = ProcessIds[index]
-            if ProcessId == 0: continue
-
+            process["process_id"] = ProcessId
+            
+            # Add timeout mechanism for individual process handling
+            start_time = time.time()
+            timeout = 5  # 5 seconds per process
+            
             try:
                 pi = ProcessInformation(ProcessId)
-                process["name"] = os.path.basename(pi.image_path)
-                process["architecture"] = str(pi._arch)
-                process["bin_path"] = pi.image_path
-                process["integrity_level"] = pi.session_id
-                process["parent_process_id"] = pi._parent_process_id
-                process["command_line"] = pi.command_line
-            except:
-                pass
+                
+                # Check if we're taking too long
+                if time.time() - start_time > timeout:
+                    process["name"] = "TIMEOUT"
+                    process["architecture"] = "unknown"
+                    process["bin_path"] = ""
+                    process["integrity_level"] = 0
+                    process["parent_process_id"] = 0
+                    process["command_line"] = ""
+                else:
+                    process["name"] = os.path.basename(pi.image_path) if pi.image_path else "unknown"
+                    process["architecture"] = str(pi._arch)
+                    process["bin_path"] = pi.image_path
+                    process["integrity_level"] = pi.session_id
+                    process["parent_process_id"] = pi._parent_process_id
+                    process["command_line"] = pi.command_line
+                    
+                
+            except Exception as e:
+                process["name"] = "ERROR"
+                process["architecture"] = "unknown"
+                process["bin_path"] = ""
+                process["integrity_level"] = 0
+                process["parent_process_id"] = 0
+                process["command_line"] = ""
+                
             processes.append(process)
 
-        task = [task for task in self.taskings if task["task_id"] == task_id]
-        task[0]["processes"] = processes
-        return { "processes": processes }
+
+        # Update task if self.taskings exists
+        try:
+            task = [task for task in self.taskings if task["task_id"] == task_id]
+            task[0]["processes"] = processes
+        except:
+            pass
+            
+        return json.dumps({"processes": processes})
