@@ -1,30 +1,42 @@
     def pip_freeze(self, task_id):
         out = ""
+
+        # Try importlib.metadata (Python 3.8+ or with importlib-metadata backport)
         try:
-            from importlib.metadata import distributions
-            installed_packages_list = sorted(
-                f"{dist.name}=={dist.version}" for dist in distributions()
+            try:
+                from importlib.metadata import distributions
+            except ImportError:
+                from importlib_metadata import distributions  # backport
+
+            installed_packages = sorted(
+                f"{dist.metadata['Name']}=={dist.version}"
+                for dist in distributions()
+                if 'Name' in dist.metadata
             )
-            return "\n".join(installed_packages_list)
-        except ImportError:
-            out += "[*] importlib.metadata not available.\n"
+            return "\n".join(installed_packages)
+
         except Exception as e:
-            out += f"[*] Error with importlib.metadata: {e}\n"
-        
+            out += f"[*] Error using importlib.metadata: {e}\n"
+
+        # Fallback: Try pkg_resources from setuptools
         try:
-            from pip._internal.operations.freeze import freeze
-            installed_packages_list = list(freeze(local_only=True))
-            return "\n".join(installed_packages_list)
-        except ImportError:
-            out += "[*] pip module not installed.\n"
+            import pkg_resources
+            installed_packages = sorted(
+                f"{dist.project_name}=={dist.version}"
+                for dist in pkg_resources.working_set
+            )
+            return "\n".join(installed_packages)
+
         except Exception as e:
-            out += f"[*] Error with pip freeze: {e}\n"
-        
+            out += f"[*] Error using pkg_resources: {e}\n"
+
+        # Last resort: list module names (not versions)
         try:
             import pkgutil
-            installed_packages_list = [name for _, name, _ in pkgutil.iter_modules()]
-            return "\n".join(installed_packages_list)
+            installed_packages = sorted(name for _, name, _ in pkgutil.iter_modules())
+            return "\n".join(installed_packages)
+
         except Exception as e:
-            out += f"[*] Error with pkgutil: {e}\n"
-        
-        return out + "[!] No modules available to list installed packages."
+            out += f"[*] Error using pkgutil: {e}\n"
+
+        return out + "[!] Could not retrieve installed package list."
