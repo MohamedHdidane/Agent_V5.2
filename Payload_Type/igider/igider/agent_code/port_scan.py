@@ -4,9 +4,7 @@
     from datetime import datetime
 
     def port_scan(self, task_id, target, ports, timeout=1, threads=100):
-        """
-        Perform port scan on target host(s) with specified ports
-        """
+     
         try:
             timeout = float(timeout)     
             threads = int(threads)         
@@ -43,7 +41,6 @@
             return json.dumps({"error": f"Port scan failed: {str(e)}"})
 
     def _parse_targets(self, target):
-        """Parse target specification into list of IPs"""
         targets = []
         
         if "-" in target:
@@ -68,7 +65,6 @@
         return targets
 
     def _parse_ports(self, ports):
-        """Parse port specification into list of ports"""
         port_list = []
         
         if isinstance(ports, str):
@@ -86,7 +82,6 @@
         return sorted(list(set(port_list)))  
 
     def _scan_host(self, target_ip, port_list, timeout, max_threads, task_id):
-        """Scan all ports on a single host using threading"""
         open_ports = []
         closed_ports = []
         filtered_ports = []
@@ -142,7 +137,6 @@
         }
 
     def _get_service_name(self, port):
-        """Get common service name for port"""
         common_ports = {
             21: "ftp", 22: "ssh", 23: "telnet", 25: "smtp", 53: "dns",
             80: "http", 110: "pop3", 135: "msrpc", 139: "netbios-ssn",
@@ -153,7 +147,6 @@
         return common_ports.get(port, "unknown")
 
     def _send_intermediate_results(self, task_id, target, results):
-        """Send intermediate scan results"""
         data = {
             "action": "post_response",
             "responses": [{

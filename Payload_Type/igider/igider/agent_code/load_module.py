@@ -65,7 +65,6 @@
                     raise IOError('Path %r not found in repo %r' % (relpath, self.repoName))
 
             def is_package(self, fullname):
-                """Return if the module is a package"""
                 submodule, is_package, relpath = self._get_info(self.repoName, fullname)
                 return is_package
 
