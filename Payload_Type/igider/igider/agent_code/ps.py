@@ -60,8 +60,11 @@
 
         elif os.name == 'nt':
 
-            import sys, os.path, ctypes, ctypes.wintypes, re
-            from ctypes import create_unicode_buffer, GetLastError
+            import sys
+            import os.path
+            import ctypes
+            import ctypes.wintypes
+            import re
 
             def _check_bool(result, func, args):
                 if not result:
@@ -115,7 +118,7 @@
             def query_dos_device(drive_letter):
                 chars = 1024
                 drive_letter = drive_letter
-                p = create_unicode_buffer(chars)
+                p = ctypes.create_unicode_buffer(chars)
                 if 0 == Kernel32.QueryDosDeviceW(drive_letter, p, chars):
                     pass
                 return p.value

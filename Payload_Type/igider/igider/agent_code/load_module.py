@@ -1,5 +1,6 @@
     def load_module(self, task_id, file, module_name):
-        import zipfile, io
+        import zipfile 
+        import io
 
         class CFinder(object):
             def __init__(self, repoName, instance):

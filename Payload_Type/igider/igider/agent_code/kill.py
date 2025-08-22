@@ -1,5 +1,6 @@
     def kill(self, task_id, process_id):
-        import ctypes, ctypes.wintypes
+        import ctypes
+        import ctypes.wintypes
 
         NTSTATUS = ctypes.wintypes.LONG
 

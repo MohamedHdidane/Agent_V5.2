@@ -1,6 +1,9 @@
     def list_dlls(self, task_id, process_id=0):
-        import sys, os.path, ctypes, ctypes.wintypes
-        import re , json
+        import sys
+        import os.path
+        import ctypes
+        import ctypes.wintypes
+        import json
     
 
         def _check_bool(result, func, args):
