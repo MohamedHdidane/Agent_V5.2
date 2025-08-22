@@ -5,8 +5,6 @@
         results = []
         start_time = datetime.now()
         current_user = getpass.getuser()
-        is_admin = ctypes.windll.shell32.IsUserAnAdmin()
-
         # Helper method to log results
         def log_result(check_name, result, severity="info", details=None):
             entry = {
