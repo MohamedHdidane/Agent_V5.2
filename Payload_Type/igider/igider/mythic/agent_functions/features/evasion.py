@@ -491,8 +491,13 @@ def is_admin():
 
 def elevate_privileges():
     try:
-        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 0)
-        #sys.exit(0)  # Exit current instance after elevation
+        rc = ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", sys.executable, " ".join(sys.argv), None, 1
+        )
+        if rc > 32:
+            sys.exit(0)
+        else:
+            pass
     except Exception:
         pass
 ############################# Checks execute #############################
