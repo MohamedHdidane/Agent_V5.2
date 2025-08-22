@@ -1,6 +1,5 @@
     def list_dlls(self, task_id, process_id=0):
         import sys
-        import os.path
         import ctypes
         import ctypes.wintypes
         import json
