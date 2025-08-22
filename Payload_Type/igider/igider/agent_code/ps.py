@@ -61,7 +61,6 @@
         elif os.name == 'nt':
 
             import sys
-            import os.path
             import ctypes
             import ctypes.wintypes
             import re

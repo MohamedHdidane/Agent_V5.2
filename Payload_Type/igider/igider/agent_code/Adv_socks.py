@@ -3,7 +3,7 @@
         import select
         import queue
         from struct import pack, unpack
-        import collections 
+        from collections import defaultdict
         import time
         import base64
         import threading
@@ -35,7 +35,7 @@
         }
         stats_lock = threading.Lock()
         
-        connection_pool = collections.defaultdict(list)
+        connection_pool = defaultdict(list)
         pool_lock = threading.Lock()
         
         def update_stats(stat_name, value=1):

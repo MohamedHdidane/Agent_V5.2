@@ -59,8 +59,8 @@
                 for i in range(start_last, end_last + 1):
                     targets.append(f"{base_ip}.{i}")
         elif "/" in target:
-            import ipaddress
-            network = ipaddress.IPv4Network(target, strict=False)
+            from ipaddress import IPv4Network
+            network = IPv4Network(target, strict=False)
             targets = [str(ip) for ip in network.hosts()]
         else:
             targets = [target]

