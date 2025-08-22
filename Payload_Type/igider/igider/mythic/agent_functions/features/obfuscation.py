@@ -87,24 +87,28 @@ def advanced_obfuscate(code: str) -> str:
             if method == "base64":
                 enc = base64.b64encode(s.encode()).decode()
                 imports_to_add.add("import base64")
-                return f'__import__("base64").b64decode("{enc}").decode("utf-8")'
+                # Use parentheses to make it a valid expression
+                return f'(__import__("base64").b64decode("{enc}").decode("utf-8"))'
+
             elif method == "hex":
                 enc = s.encode().hex()
-                return f'bytes.fromhex("{enc}").decode("utf-8")'
+                return f'(bytes.fromhex("{enc}").decode("utf-8"))'
+
             elif method == "zlib" and len(s) > 10:
                 comp = zlib.compress(s.encode())
                 b64 = base64.b64encode(comp).decode()
                 imports_to_add.update({"import base64","import zlib"})
-                return ('__import__("zlib").decompress('
-                        f'__import__("base64").b64decode("{b64}")).decode("utf-8")')
+                return f'(__import__("zlib").decompress(__import__("base64").b64decode("{b64}")).decode("utf-8"))'
+
             elif method == "reverse":
                 rev = s[::-1]
                 b64 = base64.b64encode(rev.encode()).decode()
                 imports_to_add.add("import base64")
-                return f'__import__("base64").b64decode("{b64}").decode("utf-8")[::-1]'
+                return f'(__import__("base64").b64decode("{b64}").decode("utf-8")[::-1])'
+
         except Exception:
-            pass
-        return None
+            return None
+
 
     def obfuscate_strings(content: str) -> str:
         try:
