@@ -418,12 +418,14 @@ class Igider(PayloadType):
             else:
                 base_code = base_code.replace("#CERTSKIP", "")
                 
-            base_code = self.clean_code(base_code)  # Clean up imports and code structure
+            #base_code = self.clean_code(base_code)  
             
             # Step 4: Apply obfuscation
             await self.update_build_step("Applying Obfuscation", "Implementing code obfuscation...")
                 # Add evasion features first
             base_code = add_evasion_features(base_code,selected_os)
+            base_code = self.clean_code(base_code)  
+
                 # Apply obfuscation based on selected level
             obfuscation_level = self.get_parameter("obfuscation_level")
             if obfuscation_level == "advanced":
