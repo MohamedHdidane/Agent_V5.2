@@ -34,7 +34,7 @@ def check_environment():
     """)
         
     else:
-        evasion_code.append("""
+        evasion_code.append(r"""
 import base64
 import ctypes
 import os
