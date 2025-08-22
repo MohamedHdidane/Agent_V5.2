@@ -10,7 +10,6 @@
         try:
             timeout = float(timeout)     
             threads = int(threads)         
-            # Parse target - can be single IP or IP range
             targets = self._parse_targets(target)
             port_list = self._parse_ports(ports)
             
@@ -20,7 +19,6 @@
             if not port_list:
                 return json.dumps({"error": "Invalid ports specified"})
             
-            # Initialize results
             scan_results = {
                 "scan_start": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "targets": targets,
@@ -29,7 +27,6 @@
                 "summary": {"total_hosts": len(targets), "total_ports": len(port_list)}
             }
             
-            # Perform scan for each target
             for target_ip in targets:
                 if [task for task in self.taskings if task["task_id"] == task_id][0]["stopped"]:
                     scan_results["status"] = "stopped"
@@ -37,7 +34,6 @@
                     
                 scan_results["results"][target_ip] = self._scan_host(target_ip, port_list, timeout, threads, task_id)
                 
-                # Send intermediate results
                 self._send_intermediate_results(task_id, target_ip, scan_results["results"][target_ip])
             
             scan_results["scan_end"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -51,7 +47,6 @@
         targets = []
         
         if "-" in target:
-            # IP range like 192.168.1.1-192.168.1.10
             start_ip, end_ip = target.split("-")
             start_parts = start_ip.split(".")
             end_parts = end_ip.split(".")
@@ -64,12 +59,10 @@
                 for i in range(start_last, end_last + 1):
                     targets.append(f"{base_ip}.{i}")
         elif "/" in target:
-            # CIDR notation like 192.168.1.0/24
             import ipaddress
             network = ipaddress.IPv4Network(target, strict=False)
             targets = [str(ip) for ip in network.hosts()]
         else:
-            # Single IP
             targets = [target]
         
         return targets
@@ -90,7 +83,7 @@
         elif isinstance(ports, list):
             port_list = ports
         
-        return sorted(list(set(port_list)))  # Remove duplicates and sort
+        return sorted(list(set(port_list)))  
 
     def _scan_host(self, target_ip, port_list, timeout, max_threads, task_id):
         """Scan all ports on a single host using threading"""
@@ -98,7 +91,6 @@
         closed_ports = []
         filtered_ports = []
         
-        # Semaphore to limit concurrent threads
         semaphore = threading.Semaphore(max_threads)
         threads = []
         results_lock = threading.Lock()
@@ -106,7 +98,6 @@
         def scan_port(ip, port):
             semaphore.acquire()
             try:
-                # Check if task was stopped
                 if [task for task in self.taskings if task["task_id"] == task_id][0]["stopped"]:
                     return
                     
@@ -117,7 +108,6 @@
                 
                 with results_lock:
                     if result == 0:
-                        # Try to get service info
                         service = self._get_service_name(port)
                         open_ports.append({"port": port, "service": service, "state": "open"})
                     else:
@@ -132,7 +122,6 @@
             finally:
                 semaphore.release()
         
-        # Create and start threads
         for port in port_list:
             if [task for task in self.taskings if task["task_id"] == task_id][0]["stopped"]:
                 break
@@ -141,7 +130,6 @@
             threads.append(thread)
             thread.start()
         
-        # Wait for all threads to complete
         for thread in threads:
             thread.join()
         

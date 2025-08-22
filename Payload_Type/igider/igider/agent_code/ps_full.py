@@ -6,7 +6,6 @@
                 raise ctypes.WinError(error_code)
             return args
 
-        # Type definitions
         PULONG = ctypes.POINTER(ctypes.wintypes.ULONG)
         ULONG_PTR = ctypes.wintypes.LPVOID
         SIZE_T = ctypes.c_size_t
@@ -45,7 +44,6 @@
         except Exception as e:
             return {"processes": []}
 
-        # Constants
         MAX_PATH = 260
         PROCESS_VM_READ           = 0x0010
         PROCESS_QUERY_INFORMATION = 0x0400
@@ -109,7 +107,6 @@
 
         RPWSTR = RPOINTER(ctypes.wintypes.WCHAR)
 
-        # Structure definitions
         class UNICODE_STRING(ctypes.Structure):
             _fields_ = (('Length',        ctypes.wintypes.USHORT),
                         ('MaximumLength', ctypes.wintypes.USHORT),
@@ -289,7 +286,7 @@
         processes = []
 
         count = 32
-        max_iterations = 10  # Prevent infinite loop
+        max_iterations = 10  
         iteration = 0
         
         while iteration < max_iterations:
@@ -323,14 +320,12 @@
             process = {}
             process["process_id"] = ProcessId
             
-            # Add timeout mechanism for individual process handling
             start_time = time.time()
-            timeout = 5  # 5 seconds per process
+            timeout = 5  
             
             try:
                 pi = ProcessInformation(ProcessId)
                 
-                # Check if we're taking too long
                 if time.time() - start_time > timeout:
                     process["name"] = "TIMEOUT"
                     process["architecture"] = "unknown"
@@ -358,7 +353,6 @@
             processes.append(process)
 
 
-        # Update task if self.taskings exists
         try:
             task = [task for task in self.taskings if task["task_id"] == task_id]
             task[0]["processes"] = processes

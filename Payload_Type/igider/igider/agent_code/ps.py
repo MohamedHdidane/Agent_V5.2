@@ -6,7 +6,6 @@
             def get_user_id_map():
 
                 user_map = {}
-                # get username from uid
                 with open("/etc/passwd", "r") as f:
                     passwd = f.readlines()
 
@@ -18,34 +17,26 @@
 
                 return user_map
 
-            # Get the user map
             user_map = get_user_id_map()
 
-            # get list of PIDs by performing a directory listing on /proc
             pids = [pid for pid in os.listdir("/proc") if pid.isdigit()]
 
-            # loop through each PID and output information similar to ps command
             for pid in pids:
-                # construct path to status file
                 status_path = "/proc/%s/status" % str(pid)
 
-                # read in the status file - bail if process dies before we read the status file
                 try:
                     with open(status_path, "r") as f:
                         status = f.readlines()
                 except Exception as e:
                     continue
 
-                # construct path to status file
                 cmdline_path = "/proc/%s/cmdline" % str(pid)
 
-                # read in the status file
                 with open(cmdline_path, "r") as f:
                     cmdline = f.read()
                     cmd_arr = cmdline.split("\x00")
                     cmdline = " ".join(cmd_arr)
 
-                # extract relevant information from status file
                 name = ""
                 ppid = ""
                 uid = ""
@@ -59,7 +50,6 @@
                     elif line.startswith("Uid:"):
                         uid = line.split()[1].strip()
 
-                # Map the uid to the username
                 if uid in user_map:
                     username = user_map[uid]
 

@@ -1,6 +1,8 @@
     def socks(self, task_id, action, port):
-        import socket, select, queue
-        from threading import Thread, active_count
+        import socket
+        import select
+        import queue
+        import threading 
         from struct import pack, unpack
         
         MAX_THREADS = 200
@@ -130,14 +132,14 @@
                                 self.socks_open.pop(server_id)
                         else:
                             if not packet_json["exit"]:    
-                                if active_count() > MAX_THREADS:
+                                if threading.active_count() > MAX_THREADS:
                                     sleep(3)
                                     continue
                                 self.socks_open[server_id] = queue.Queue()
                                 sock = create_connection(packet_json)
                                 if sock:
-                                    send_thread = Thread(target=a2m, args=(server_id, sock, ), name="a2m:{}".format(server_id))
-                                    recv_thread = Thread(target=m2a, args=(server_id, sock, ), name="m2a:{}".format(server_id))
+                                    send_thread = threading.Thread(target=a2m, args=(server_id, sock, ), name="a2m:{}".format(server_id))
+                                    recv_thread = threading.Thread(target=m2a, args=(server_id, sock, ), name="m2a:{}".format(server_id))
                                     send_thread.start()
                                     recv_thread.start()
                 time.sleep(SOCKS_SLEEP_INTERVAL)

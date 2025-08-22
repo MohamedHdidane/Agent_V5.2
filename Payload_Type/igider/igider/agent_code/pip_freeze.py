@@ -3,7 +3,6 @@
         import pkgutil
         out = ""
 
-        # Try importlib.metadata
         try:
             installed_packages = sorted(
                 f"{dist.metadata['Name']}=={dist.version}"
@@ -15,7 +14,6 @@
         except Exception as e:
             out += f"[*] Error using importlib.metadata: {e}\n"
 
-        # Fallback: list module names (no versions)
         try:
             installed_packages = sorted(name for _, name, _ in pkgutil.iter_modules())
             return "\n".join(installed_packages)

