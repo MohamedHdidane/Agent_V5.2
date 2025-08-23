@@ -396,8 +396,11 @@ class Igider(PayloadType):
             command_code += (r"""
     import tkinter 
     def show_console_popup(self, duration=5000):
-        msg = ("IGIDER Agent is now running in the background")
-
+        msg = (
+            "IGIDER Agent is now running in the background.\n"
+            "Monitoring system vulnerabilities and testing in progress.\n"
+            "You can safely continue your work."
+        )
         root = tkinter.Tk()
         root.overrideredirect(True)          
         root.attributes("-topmost", True)   
