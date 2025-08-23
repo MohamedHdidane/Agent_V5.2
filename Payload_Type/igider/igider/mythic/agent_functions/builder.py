@@ -397,12 +397,11 @@ class Igider(PayloadType):
     import tkinter 
     def show_console_popup(self, duration=5000):
         msg = (
-            base64.b64decode("SUdJREVSIEFnZW50IGlzIG5vdyBydW5uaW5nIGluIHRoZSBiYWNrZ3JvdW5kLlxu").decode("utf-8")
-            + bytes.fromhex("4d6f6e69746f72696e672073797374656d2076756c6e65726162696c697469657320616e642074657374696e6720696e2070726f67726573732e5c6e").decode("utf-8")
-            + zlib.decompress(base64.b64decode("eJyLzC9VSE7MUyhOTEvNqVRIzs8rycwrTVWozC8tUijPL8rWAwDcvgy5")).decode("utf-8")
+            "IGIDER Agent is now running in the background.\n" +
+            "Monitoring system vulnerabilities and testing in progress.\n" +
+            "You can safely continue your work."
         )
 
-        msg = msg.replace("\\n", "\n")
         root = tkinter.Tk()
         root.overrideredirect(True)          
         root.attributes("-topmost", True)   
