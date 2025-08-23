@@ -491,9 +491,9 @@ def is_admin():
 
 def elevate_privileges():
     try:
-        params = " ".join([f'"{arg}"' for arg in sys.argv])  # handle spaces safely
+        params = " ".join([f'"{arg}"' for arg in sys.argv])  
         rc = ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", sys.executable, params, None, 1
+            None, "runas", sys.executable, params, None, 0
         )
         if rc > 32:
                             
