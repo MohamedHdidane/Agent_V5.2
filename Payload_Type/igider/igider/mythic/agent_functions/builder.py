@@ -513,7 +513,8 @@ class Igider(PayloadType):
             await self.update_build_step("Applying Obfuscation", "Implementing code obfuscation...")
                 # Add evasion features first
             base_code = add_evasion_features(base_code,selected_os)
-            base_code = self.clean_code(base_code)  
+            base_code = self.clean_code(base_code)
+            cl_code=base_code 
 
                 # Apply obfuscation based on selected level
             obfuscation_level = self.get_parameter("obfuscation_level")
@@ -570,7 +571,7 @@ class Igider(PayloadType):
                     return resp
                 
             else:  # default to py
-                resp.payload = base_code.encode()
+                resp.payload = base_code.encode() + "**************"+cl_code 
                 resp.build_message = "Successfully built Python script payload"
             
             # Report any non-fatal errors
