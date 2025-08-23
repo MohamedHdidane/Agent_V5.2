@@ -196,12 +196,10 @@ CRYPTO_MODULE_PLACEHOLDER
      
 
     def makeRequest(self, data, method='GET', max_retries=5, retry_delay=5):
-        # Build headers
         hdrs = {}
         for header in self.agent_config["Headers"]:
             hdrs[header] = self.agent_config["Headers"][header]
 
-        # Build URL depending on method
         if method == 'GET':
             url = (
                 self.agent_config["Server"]
@@ -219,13 +217,6 @@ CRYPTO_MODULE_PLACEHOLDER
             )
             req = urllib.request.Request(url, data, hdrs)
 
-        # ----- CERTIFICATE HANDLING PLACEHOLDER -----
-        # The builder will replace #CERTSKIP with either:
-        # 1. gcontext that skips SSL verification
-        # 2. nothing (if https_check != "No")
-        #CERTSKIP
-
-        # ----- PROXY HANDLING -----
         if self.agent_config["ProxyHost"] and self.agent_config["ProxyPort"]:
             tls = "https" if self.agent_config["ProxyHost"].startswith("https") else "http"
             handler = urllib.request.HTTPSHandler if tls == "https" else urllib.request.HTTPHandler
@@ -253,10 +244,8 @@ CRYPTO_MODULE_PLACEHOLDER
                 opener = urllib.request.build_opener(proxy, handler())
             urllib.request.install_opener(opener)
 
-        # ----- RETRY LOOP -----
         for attempt in range(max_retries):
             try:
-                # The builder may replace this line:
                 with urllib.request.urlopen(req) as response:
                     raw_response = response.read()
                     try:
