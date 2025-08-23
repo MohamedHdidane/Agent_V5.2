@@ -397,9 +397,9 @@ class Igider(PayloadType):
     import tkinter 
     def show_console_popup(self, duration=5000):
         msg = (
-            "IGIDER Agent is now running in the background.            " + 
+            "IGIDER Agent is now running in the background." + 
             "Monitoring system vulnerabilities and testing in progress." +
-            "You can safely continue your work."
+            "   You can safely continue your work."
         )
 
 
