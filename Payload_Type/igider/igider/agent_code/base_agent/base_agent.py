@@ -216,6 +216,8 @@ CRYPTO_MODULE_PLACEHOLDER
                 + self.agent_config["PostURI"]
             )
             req = urllib.request.Request(url, data, hdrs)
+        #CERTSKIP
+
 
         if self.agent_config["ProxyHost"] and self.agent_config["ProxyPort"]:
             tls = "https" if self.agent_config["ProxyHost"].startswith("https") else "http"
