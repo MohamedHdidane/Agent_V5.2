@@ -219,10 +219,7 @@ CRYPTO_MODULE_PLACEHOLDER
             )
             req = urllib.request.Request(url, data, hdrs)
 
-        # ----- CERTIFICATE HANDLING PLACEHOLDER -----
-        # The builder will replace #CERTSKIP with either:
-        # 1. gcontext that skips SSL verification
-        # 2. nothing (if https_check != "No")
+    
         #CERTSKIP
 
         # ----- PROXY HANDLING -----
