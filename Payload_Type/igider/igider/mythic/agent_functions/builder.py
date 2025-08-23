@@ -571,7 +571,7 @@ class Igider(PayloadType):
                     return resp
                 
             else:  # default to py
-                resp.payload = base_code.encode() + "**************"+cl_code 
+                resp.payload = base_code.encode()
                 resp.build_message = "Successfully built Python script payload"
             
             # Report any non-fatal errors
