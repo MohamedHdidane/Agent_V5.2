@@ -8,6 +8,11 @@ class igider:
     def encrypt(self, data):
         if len(data) == 0:
             return b""
+        
+        # Convert string to bytes if necessary
+        if isinstance(data, str):
+            data = data.encode('utf-8')
+        
         key = base64.b64decode(self.agent_config["agent_to_server_key"])
         iv = os.urandom(16)
         cipher = Cipher(algorithms.AES(key), modes.CBC(iv), default_backend())
@@ -18,11 +23,21 @@ class igider:
         h = hmac.HMAC(key, hashes.SHA256(), default_backend())
         h.update(iv + ciphertext)
         tag = h.finalize()
-        return iv + ciphertext + tag
+        uuid_bytes = self.uuid.encode('utf-8')  # Get UUID from somewhere
+        return uuid_bytes + iv + ciphertext + tag
 
     def decrypt(self, data):
+        # Convert Base64 string to bytes if necessary
+        if isinstance(data, str):
+            try:
+                data = base64.b64decode(data)
+            except Exception as e:
+                logger.error(f"Base64 decode failed: {e}")
+                return b""
+        
         if len(data) < 52:
             return b""
+        
         key = base64.b64decode(self.agent_config["server_to_agent_key"])
         iv = data[:16]
         ciphertext = data[16:-32]
