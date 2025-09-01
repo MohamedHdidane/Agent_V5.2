@@ -10,31 +10,28 @@ class igider:
             return b""
         key = base64.b64decode(self.agent_config["agent_to_server_key"])
         iv = os.urandom(16)
-        backend = default_backend()
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend)
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), default_backend())
         encryptor = cipher.encryptor()
         padder = padding.PKCS7(128).padder()
         padded_data = padder.update(data) + padder.finalize()
         ciphertext = encryptor.update(padded_data) + encryptor.finalize()
-        h = hmac.HMAC(key, hashes.SHA256(), backend)
+        h = hmac.HMAC(key, hashes.SHA256(), default_backend())
         h.update(iv + ciphertext)
         tag = h.finalize()
         return iv + ciphertext + tag
 
     def decrypt(self, data):
-        if len(data) < 52:  # Minimum: 16 (IV) + 16 (min ciphertext) + 32 (HMAC)
+        if len(data) < 52:
             return b""
         key = base64.b64decode(self.agent_config["server_to_agent_key"])
         iv = data[:16]
         ciphertext = data[16:-32]
         received_tag = data[-32:]
-        backend = default_backend()
-        h = hmac.HMAC(key, hashes.SHA256(), backend)
+        h = hmac.HMAC(key, hashes.SHA256(), default_backend())
         h.update(iv + ciphertext)
-        calculated_tag = h.finalize()
-        if not hmac.compare_digest(calculated_tag, received_tag):
+        if not hmac.compare_digest(h.finalize(), received_tag):
             return b""
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend)
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), default_backend())
         decryptor = cipher.decryptor()
         padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
         unpadder = padding.PKCS7(128).unpadder()
