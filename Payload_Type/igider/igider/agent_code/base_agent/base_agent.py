@@ -289,8 +289,8 @@ CRYPTO_MODULE_PLACEHOLDER
             "Sleep": callback_interval,
             "Jitter": callback_jitter,
             "KillDate": "killdate",
-            "agent_to_server_key": "AGENT_TO_SERVER_KEY",
-            "server_to_agent_key": "SERVER_TO_AGENT_KEY",
+            "agent_to_server_key": AGENT_TO_SERVER_KEY,
+            "server_to_agent_key": SERVER_TO_AGENT_KEY,
             "ExchChk": "encrypted_exchange_check",
             "GetURI": "/get_uri",
             "GetParam": "query_path_name",
@@ -343,5 +343,5 @@ CRYPTO_MODULE_PLACEHOLDER
         except KeyboardInterrupt:
             self.exit(0)               
 
-if __name__ == "__main__":
-    igider = igider()
+    if __name__ == "__main__":
+        igider = igider()
