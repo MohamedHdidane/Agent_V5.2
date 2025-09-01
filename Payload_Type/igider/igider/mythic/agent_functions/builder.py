@@ -29,7 +29,7 @@ class Igider(PayloadType):
     wrapper = False
     wrapped_payloads = ["pickle_wrapper"]
     mythic_encrypts = False
-    translation_container = "binaryTranslator"
+    translation_container = "binarytranslator"
     note = "Production-ready Python agent with advanced obfuscation and encryption features"
     supports_dynamic_loading = True
     
