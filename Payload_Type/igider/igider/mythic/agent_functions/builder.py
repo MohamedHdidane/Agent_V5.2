@@ -594,7 +594,7 @@ class Igider(PayloadType):
         except Exception as e:
             self.logger.error(f"Build failed: {str(e)}")
             resp.set_status(BuildStatus.Error)
-            resp.build_stderr = f"Error building payload: {str(e) , pubkey_str}"
+            resp.build_stderr = f"Error building payload: {str(e) ,self.build_parameters["c2_profile"],pubkey_str}"
             await self.update_build_step("Finalizing Payload", f"Build failed: {str(e)}", False)
             
         return resp
