@@ -347,7 +347,8 @@ class Igider(PayloadType):
         
         try:
             # Mythic gives you the keys generated in translator.generate_keys
-            pubkey_bytes = self.build_parameters["c2_profile"][0].enc_key  # EncryptionKey
+            c2_profile = self.build_parameters["c2_profile"][0]
+            pubkey_bytes = c2_profile["enc_key"]
             # decode if necessary
             pubkey_str = pubkey_bytes.decode() if isinstance(pubkey_bytes, bytes) else pubkey_bytes
           
@@ -594,7 +595,7 @@ class Igider(PayloadType):
         except Exception as e:
             self.logger.error(f"Build failed: {str(e)}")
             resp.set_status(BuildStatus.Error)
-            resp.build_stderr = f"Error building payload: {str(e) ,self.build_parameters["c2_profile"],pubkey_str}"
+            resp.build_stderr = f"Error building payload: {str(e) ,pubkey_str}"
             await self.update_build_step("Finalizing Payload", f"Build failed: {str(e)}", False)
             
         return resp
