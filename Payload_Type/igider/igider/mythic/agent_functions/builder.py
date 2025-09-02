@@ -347,7 +347,7 @@ class Igider(PayloadType):
         
         try:
             # Mythic gives you the keys generated in translator.generate_keys
-            pubkey_bytes = self.build_parameters["c2_profile"].enc_key  # EncryptionKey
+            pubkey_bytes = self.build_parameters["c2_profile"][0].enc_key  # EncryptionKey
             # decode if necessary
             pubkey_str = pubkey_bytes.decode() if isinstance(pubkey_bytes, bytes) else pubkey_bytes
           
