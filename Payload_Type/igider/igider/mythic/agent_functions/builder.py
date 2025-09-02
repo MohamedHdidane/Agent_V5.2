@@ -346,10 +346,14 @@ class Igider(PayloadType):
         build_errors = []
         
         try:
-            # Mythic gives you the keys generated in translator.generate_keys
-            pubkey_bytes = self.build_parameters["c2_profile"].enc_key  # EncryptionKey
-            # decode if necessary
-            pubkey_str = pubkey_bytes.decode() if isinstance(pubkey_bytes, bytes) else pubkey_bytes
+            try:
+                # Mythic gives you the keys generated in translator.generate_keys
+                pubkey_bytes = self.build_parameters["c2_profile"].enc_key  # EncryptionKey
+                # decode if necessary
+                pubkey_str = pubkey_bytes.decode() if isinstance(pubkey_bytes, bytes) else pubkey_bytes
+            except Exception as e:
+                resp.build_stderr = f"here is the error cause: {str(e)}"
+
             # Step 1: Initialize build
             await self.update_build_step("Initializing Build", "Starting build process...")
             # Step 2: Gather components
