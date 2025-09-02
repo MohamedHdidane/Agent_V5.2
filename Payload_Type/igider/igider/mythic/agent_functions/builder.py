@@ -346,16 +346,11 @@ class Igider(PayloadType):
         build_errors = []
         
         try:
-            try:
-                # Mythic gives you the keys generated in translator.generate_keys
-                pubkey_bytes = self.build_parameters["c2_profile"].enc_key  # EncryptionKey
-                # decode if necessary
-                pubkey_str = pubkey_bytes.decode() if isinstance(pubkey_bytes, bytes) else pubkey_bytes
-            except Exception as e:
-                self.logger.error(f"Build failed: {str(e)}")
-                resp.set_status(BuildStatus.Error)
-                resp.build_stderr = f"hhhhhhhhhh: {str(e)}"
-                await self.update_build_step("Finalizing Payload", f"Build failed: {str(e)}", False)
+            # Mythic gives you the keys generated in translator.generate_keys
+            pubkey_bytes = self.build_parameters["c2_profile"].enc_key  # EncryptionKey
+            # decode if necessary
+            pubkey_str = pubkey_bytes.decode() if isinstance(pubkey_bytes, bytes) else pubkey_bytes
+          
 
             # Step 1: Initialize build
             await self.update_build_step("Initializing Build", "Starting build process...")
@@ -599,7 +594,7 @@ class Igider(PayloadType):
         except Exception as e:
             self.logger.error(f"Build failed: {str(e)}")
             resp.set_status(BuildStatus.Error)
-            resp.build_stderr = f"Error building payload: {str(e)}"
+            resp.build_stderr = f"Error building payload: {str(e) , pubkey_str}"
             await self.update_build_step("Finalizing Payload", f"Build failed: {str(e)}", False)
             
         return resp
