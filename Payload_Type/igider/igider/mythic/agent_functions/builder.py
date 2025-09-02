@@ -346,19 +346,6 @@ class Igider(PayloadType):
         build_errors = []
         
         try:
-            # Mythic gives you the keys generated in translator.generate_keys
-            if not self.c2info:
-                raise Exception("No C2 profile selected for build")
-
-            # Get first C2 profile's parameters
-            c2_profile_params = self.c2info[0].get_parameters_dict()
-            pubkey_bytes = c2_profile_params.get("enc_key")
-            if not pubkey_bytes:
-                raise Exception("enc_key missing from C2 profile parameters")
-
-            # decode if necessary
-            pubkey_str = pubkey_bytes.decode() if isinstance(pubkey_bytes, bytes) else pubkey_bytes
-          
 
             # Step 1: Initialize build
             await self.update_build_step("Initializing Build", "Starting build process...")
@@ -508,8 +495,7 @@ class Igider(PayloadType):
             base_code = base_code.replace("CRYPTO_MODULE_PLACEHOLDER", crypto_code)
             base_code = base_code.replace("UUID_HERE", self.uuid)
             base_code = base_code.replace("#COMMANDS_PLACEHOLDER", command_code)
-            base_code = base_code.replace("PUBLIC_KEY_PLACEHOLDER", pubkey_str)
-
+            
             
                 # Process C2 profile configuration
             for c2 in self.c2info:
@@ -602,7 +588,7 @@ class Igider(PayloadType):
         except Exception as e:
             self.logger.error(f"Build failed: {str(e)}")
             resp.set_status(BuildStatus.Error)
-            resp.build_stderr = f"Error building payload: {str(e) ,pubkey_str}"
+            resp.build_stderr = f"Error building payload: {str(e)}"
             await self.update_build_step("Finalizing Payload", f"Build failed: {str(e)}", False)
             
         return resp

