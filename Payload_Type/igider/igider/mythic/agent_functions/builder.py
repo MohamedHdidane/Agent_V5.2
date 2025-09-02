@@ -347,8 +347,15 @@ class Igider(PayloadType):
         
         try:
             # Mythic gives you the keys generated in translator.generate_keys
-            c2_profile = self.build_parameters["c2_profile"][0]
+            c2_profile = next(
+                (p["value"] for p in self.build_parameters if p["name"] == "c2_profile"),
+                None,
+            )
+            if not c2_profile:
+                raise Exception("No c2_profile in build_parameters")
+
             pubkey_bytes = c2_profile["enc_key"]
+
             # decode if necessary
             pubkey_str = pubkey_bytes.decode() if isinstance(pubkey_bytes, bytes) else pubkey_bytes
           
