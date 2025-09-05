@@ -210,21 +210,34 @@ class Igider(PayloadType):
 
 
     def _build_executable(self, code: str) -> bytes:
-        """Build standalone Linux executable using Nuitka."""
-
+        """Build standalone Linux executable using Nuitka with improved error handling."""
+        
+        # Check if Nuitka is installed
         try:
-            subprocess.run([sys.executable, "-m", "nuitka", "--version"],
-                        capture_output=True, check=True)
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            raise Exception("Nuitka is not installed")
+            result = subprocess.run([sys.executable, "-m", "nuitka", "--version"],
+                                capture_output=True, check=True, timeout=10)
+            self.logger.info(f"Nuitka version: {result.stdout.decode().strip()}")
+        except subprocess.TimeoutExpired:
+            raise Exception("Nuitka version check timed out")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            raise Exception(f"Nuitka is not installed or not working: {e}")
 
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="igider_build_") as temp_dir:
+            self.logger.info(f"Using temporary directory: {temp_dir}")
+            
+            # Write the main Python file
             main_file = os.path.join(temp_dir, "igider.py")
-            with open(main_file, "w") as f:
-                f.write(code)
+            try:
+                with open(main_file, "w", encoding='utf-8') as f:
+                    f.write(code)
+                self.logger.info(f"Written main file: {main_file}")
+            except Exception as e:
+                raise Exception(f"Failed to write main file: {e}")
 
-            exe_path = os.path.join(temp_dir, "igider.bin")  # Nuitka will generate binary here
+            # Expected output path (Nuitka will create this)
+            exe_path = os.path.join(temp_dir, "igider.bin")
 
+            # Optimized Nuitka command with better resource management
             cmd = [
                 sys.executable, "-m", "nuitka",
                 "--onefile",
@@ -232,6 +245,8 @@ class Igider(PayloadType):
                 main_file,
                 "--remove-output",
                 "--enable-plugin=anti-bloat",
+                
+                # Metadata
                 "--company-name=Offensy",
                 "--product-name=IGIDER",
                 "--file-version=1.0.0.0",
@@ -239,117 +254,122 @@ class Igider(PayloadType):
                 "--file-description=Red Team Penetration Testing Agent",
                 "--copyright=Copyright © 2024 Offensy. All rights reserved.",
                 "--trademarks=IGIDER",
+                
+                # Exclude problematic modules
                 "--noinclude-setuptools-mode=error",
                 "--noinclude-pytest-mode=error",
                 "--noinclude-IPython-mode=error",
-                # Forced includes
+                
+                # Memory and performance optimizations
+                "--low-memory",
+                "--jobs=2",  # Limit parallel jobs to prevent memory issues
+                
+                # Core modules (reduced list for faster builds)
                 "--include-module=sys",
-                "--include-module=psutil",
-                "--include-module=pefile",
-                "--include-module=builtins",
-                "--include-module=time",
                 "--include-module=os",
-                "--include-module=warnings",
-                "--include-module=math",
-                "--include-module=operator",
-                "--include-module=itertools",
-                "--include-module=random",
-                "--include-module=types",
-                "--include-module=keyword",
-                "--include-module=reprlib",
-                "--include-module=collections",
-                "--include-module=functools",
-                "--include-module=enum",
-                "--include-module=re",
+                "--include-module=time",
                 "--include-module=json",
                 "--include-module=socket",
-                "--include-module=select",
-                "--include-module=selectors",
-                "--include-module=errno",
-                "--include-module=struct",
-                "--include-module=binascii",
-                "--include-module=base64",
-                "--include-module=platform",
                 "--include-module=ssl",
-                "--include-module=contextlib",
-                "--include-module=getpass",
-                "--include-module=urllib",
-                "--include-module=urllib.request",
-                "--include-module=urllib.parse",
-                "--include-module=urllib.error",
-                "--include-module=urllib.response",
-                "--include-module=email",
-                "--include-module=email.errors",
-                "--include-module=email.quoprimime",
-                "--include-module=email.base64mime",
-                "--include-module=quopri",
-                "--include-module=email.encoders",
-                "--include-module=email.charset",
-                "--include-module=email.header",
-                "--include-module=email._parseaddr",
-                "--include-module=email.utils",
-                "--include-module=email._policybase",
-                "--include-module=email.feedparser",
-                "--include-module=email.parser",
-                "--include-module=email._encoded_words",
-                "--include-module=email.iterators",
-                "--include-module=email.message",
-                "--include-module=http",
-                "--include-module=http.client",
-                "--include-module=calendar",
-                "--include-module=datetime",
-                "--include-module=ipaddress",
-                "--include-module=locale",
-                "--include-module=zlib",
-                "--include-module=bz2",
-                "--include-module=lzma",
-                "--include-module=shutil",
-                "--include-module=tempfile",
-                "--include-module=nturl2path",
+                "--include-module=base64",
+                "--include-module=subprocess",
                 "--include-module=threading",
-                "--include-module=queue",
-                "--include-module=hmac",
                 "--include-module=ctypes",
                 "--include-module=signal",
-                "--include-module=subprocess",
-                "--include-module=csv",
-                "--include-module=pathlib",
-                "--include-module=zipfile",
-                "--include-module=textwrap",
-                "--include-module=ast",
-                "--include-module=opcode",
-                "--include-module=dis",
-                "--include-module=token",
-                "--include-module=tokenize",
-                "--include-module=linecache",
-                "--include-module=inspect",
-                "--include-module=importlib",
-                "--include-module=importlib.metadata",
-                "--include-module=importlib.resources",
-                "--include-module=typing",
-                "--include-module=pkgutil",
-                "--include-module=tkinter",
-                "--enable-plugin=tk-inter",
+                "--include-module=psutil",
+                "--include-module=pefile",
+                
+                # Cryptography (essential for security tools)
                 "--include-package=cryptography",
                 "--include-module=cryptography.hazmat.primitives.ciphers",
                 "--include-module=cryptography.hazmat.primitives.ciphers.algorithms",
                 "--include-module=cryptography.hazmat.primitives.ciphers.modes",
                 "--include-module=cryptography.hazmat.backends",
+                
+                # Output configuration
                 f"--output-dir={temp_dir}",
                 "--output-filename=igider.bin"
             ]
 
-            self.logger.info(f"Running Nuitka: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir, timeout=600)
+            self.logger.info("Starting Nuitka compilation...")
+            self.logger.debug(f"Nuitka command: {' '.join(cmd)}")
+            
+            try:
+                # Increase timeout and add better process management
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    cwd=temp_dir, 
+                    timeout=1200,  # 20 minutes timeout
+                    env={**os.environ, 'PYTHONUNBUFFERED': '1'}
+                )
+                
+                # Log output for debugging
+                if result.stdout:
+                    self.logger.debug(f"Nuitka stdout: {result.stdout}")
+                if result.stderr:
+                    self.logger.warning(f"Nuitka stderr: {result.stderr}")
+                    
+            except subprocess.TimeoutExpired as e:
+                self.logger.error("Nuitka compilation timed out")
+                raise Exception(f"Nuitka build timed out after 20 minutes: {e}")
+            except Exception as e:
+                raise Exception(f"Nuitka execution failed: {e}")
 
+            # Check build result
             if result.returncode != 0:
-                raise Exception(f"Nuitka build failed: {result.stderr}")
+                error_msg = f"Nuitka build failed with return code {result.returncode}"
+                if result.stderr:
+                    error_msg += f": {result.stderr}"
+                self.logger.error(error_msg)
+                raise Exception(error_msg)
 
+            # Verify executable exists
             if not os.path.exists(exe_path):
-                raise Exception(f"Executable not found at {exe_path}")
+                # Try alternative paths that Nuitka might use
+                alternative_paths = [
+                    os.path.join(temp_dir, "igider.dist", "igider.bin"),
+                    os.path.join(temp_dir, "igider"),
+                    os.path.join(temp_dir, "igider.exe")  # Just in case
+                ]
+                
+                for alt_path in alternative_paths:
+                    if os.path.exists(alt_path):
+                        exe_path = alt_path
+                        self.logger.info(f"Found executable at alternative path: {exe_path}")
+                        break
+                else:
+                    # List directory contents for debugging
+                    try:
+                        contents = os.listdir(temp_dir)
+                        self.logger.error(f"Directory contents: {contents}")
+                    except Exception as e:
+                        self.logger.error(f"Cannot list directory: {e}")
+                        
+                    raise Exception(f"Executable not found. Expected at {exe_path}")
 
-            with open(exe_path, "rb") as f:
-                return f.read()
+            # Verify executable is valid
+            try:
+                file_size = os.path.getsize(exe_path)
+                self.logger.info(f"Executable built successfully. Size: {file_size} bytes")
+                
+                if file_size == 0:
+                    raise Exception("Executable file is empty")
+                    
+            except Exception as e:
+                raise Exception(f"Executable validation failed: {e}")
+
+            # Read and return the executable
+            try:
+                with open(exe_path, "rb") as f:
+                    executable_data = f.read()
+                
+                self.logger.info(f"Successfully read executable ({len(executable_data)} bytes)")
+                return executable_data
+                
+            except Exception as e:
+                raise Exception(f"Failed to read executable: {e}")
 
             
             
