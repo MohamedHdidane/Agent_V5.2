@@ -335,7 +335,7 @@ class Igider(PayloadType):
                 "--include-module=cryptography.hazmat.primitives.ciphers.algorithms",
                 "--include-module=cryptography.hazmat.primitives.ciphers.modes",
                 "--include-module=cryptography.hazmat.backends",
-                "--output-dir", temp_dir,
+                f"--output-dir={temp_dir}",
                 "--output-filename=igider.bin"
             ]
 
