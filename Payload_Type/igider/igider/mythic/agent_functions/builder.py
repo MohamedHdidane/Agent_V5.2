@@ -219,12 +219,11 @@ class Igider(PayloadType):
             raise Exception("Nuitka is not installed")
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Write the provided code to igider1.py
-            main_file = os.path.join(temp_dir, "igider1.py")
+            main_file = os.path.join(temp_dir, "igider.py")
             with open(main_file, "w") as f:
                 f.write(code)
 
-            exe_path = os.path.join(temp_dir, "igider1.bin")  # Nuitka will generate binary here
+            exe_path = os.path.join(temp_dir, "igider.bin")  # Nuitka will generate binary here
 
             cmd = [
                 sys.executable, "-m", "nuitka",
@@ -336,7 +335,8 @@ class Igider(PayloadType):
                 "--include-module=cryptography.hazmat.primitives.ciphers.algorithms",
                 "--include-module=cryptography.hazmat.primitives.ciphers.modes",
                 "--include-module=cryptography.hazmat.backends",
-                "--output-filename=" + exe_path
+                "--output-dir", temp_dir,
+                "--output-filename=igider.bin"
             ]
 
             self.logger.info(f"Running Nuitka: {' '.join(cmd)}")
