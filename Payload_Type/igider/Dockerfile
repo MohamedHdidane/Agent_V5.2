@@ -8,17 +8,16 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     python3-venv \
     python3-pip \
+    libssl-dev \
+    libffi-dev \
     patchelf \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip/setuptools/wheel
-RUN pip3 install --upgrade pip setuptools wheel
+RUN python3 -m pip install --upgrade pip setuptools wheel
 
-# Install Nuitka with correct deps
-RUN pip3 install nuitka ordered-set zstandard
-
-# Install Python packages that Nuitka needs when you use --include-module/--include-package
-RUN pip3 install --no-cache-dir cryptography psutil pefile
+# Explicitly install Nuitka + dependencies into Python3
+RUN python3 -m pip install nuitka ordered-set zstandard cryptography psutil pefile
 
 # (Optional) UPX for smaller binaries
 RUN apt-get update && apt-get install -y upx-ucl && rm -rf /var/lib/apt/lists/*
