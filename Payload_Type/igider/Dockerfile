@@ -8,12 +8,13 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     python3-venv \
     python3-pip \
+    patchelf \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip/setuptools/wheel
 RUN pip3 install --upgrade pip setuptools wheel
 
-# Install Nuitka with correct deps (ordered-set, zstandard)
+# Install Nuitka with correct deps
 RUN pip3 install nuitka ordered-set zstandard
 
 # (Optional) UPX for smaller binaries
