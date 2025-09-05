@@ -45,9 +45,9 @@ class Igider(PayloadType):
         BuildParameter(
             name="cryptography_method",
             parameter_type=BuildParameterType.ChooseOne,
-            description="Select crypto implementation method",
-            choices=["CryptoAES", "CustomAES"],
-            default_value="CustomAES"
+            description="Apply encryption",
+            choices=["Yes", "No"],
+            default_value="Yes"
         ),
         BuildParameter(
             name="obfuscation_level",
@@ -364,7 +364,7 @@ class Igider(PayloadType):
             
             # Load appropriate crypto module
             crypto_method = self.get_parameter("cryptography_method")
-            if crypto_method == "CryptoAES":
+            if crypto_method == "Yes":
                 crypto_path = self.get_file_path(os.path.join(self.agent_code_path, "base_agent"), "crypto_lib")
             else: 
                 crypto_path = self.get_file_path(os.path.join(self.agent_code_path, "base_agent"), "manual_crypto")
