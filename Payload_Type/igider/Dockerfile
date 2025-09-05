@@ -17,6 +17,9 @@ RUN pip3 install --upgrade pip setuptools wheel
 # Install Nuitka with correct deps
 RUN pip3 install nuitka ordered-set zstandard
 
+# Install Python packages that Nuitka needs when you use --include-module/--include-package
+RUN pip3 install --no-cache-dir cryptography psutil pefile
+
 # (Optional) UPX for smaller binaries
 RUN apt-get update && apt-get install -y upx-ucl && rm -rf /var/lib/apt/lists/*
 
