@@ -43,7 +43,7 @@ class Igider(PayloadType):
         ),
         
         BuildParameter(
-            name="cryptography_method",
+            name="cryptography",
             parameter_type=BuildParameterType.ChooseOne,
             description="Apply encryption",
             choices=["Yes", "No"],
@@ -363,17 +363,16 @@ class Igider(PayloadType):
             base_code = self._load_module_content(base_agent_path)
             
             # Load appropriate crypto module
-            crypto_method = self.get_parameter("cryptography_method")
+            crypto_method = self.get_parameter("cryptography")
             if crypto_method == "Yes":
                 crypto_path = self.get_file_path(os.path.join(self.agent_code_path, "base_agent"), "crypto_lib")
-            else: 
-                crypto_path = self.get_file_path(os.path.join(self.agent_code_path, "base_agent"), "manual_crypto")
-                
-            if not crypto_path:
-                build_errors.append(f"Crypto module '{crypto_method}' not found")
-                crypto_code = "# Error loading crypto module"
+                if not crypto_path:
+                    build_errors.append(f"Crypto module '{crypto_method}' not found")
+                    crypto_code = "# Error loading crypto module"
+                else:
+                    crypto_code = self._load_module_content(crypto_path)
             else:
-                crypto_code = self._load_module_content(crypto_path)
+                crypto_code = ""
             ###############################################################################################
                 # Load command modules
             command_code = ""
