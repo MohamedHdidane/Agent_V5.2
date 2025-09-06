@@ -305,10 +305,8 @@ class Igider(PayloadType):
 
             exe = EXE(
                 pyz,
-                a.scripts[0],
-                a.binaries,
-                a.zipfiles,
-                a.datas,
+                a.scripts,
+                a.binaries + a.zipfiles + a.datas,
                 [],
                 name='{exe_name}',
                 debug=False,
@@ -323,6 +321,7 @@ class Igider(PayloadType):
                 codesign_identity=None,
                 entitlements_file=None
             )
+
         """)
 
         return spec_content

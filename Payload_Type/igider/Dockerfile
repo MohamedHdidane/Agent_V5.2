@@ -21,6 +21,5 @@ RUN mkdir -p /tmp/build_cache
 
 # Set environment variables for PyInstaller
 ENV PYINSTALLER_CACHE_DIR=/tmp/build_cache
-ENV WINE_PREFIX=/root/.wine
 
 CMD ["python3", "main.py"]
