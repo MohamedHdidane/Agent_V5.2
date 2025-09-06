@@ -330,6 +330,11 @@ class Igider(PayloadType):
 
 
     def _build_executable(self, code: str) -> bytes:
+        import os
+        import sys
+        import subprocess
+        import tempfile
+
         # Check if PyInstaller is available
         try:
             subprocess.run([sys.executable, "-m", "PyInstaller", "--version"],
@@ -349,12 +354,24 @@ class Igider(PayloadType):
             with open(spec_path, "w") as f:
                 f.write(spec_content)
 
+            # Create minimal fontconfig configuration
+            fontconfig_dir = os.path.join(temp_dir, "fontconfig")
+            os.makedirs(fontconfig_dir, exist_ok=True)
+            fontconfig_conf = os.path.join(fontconfig_dir, "fonts.conf")
+            with open(fontconfig_conf, "w") as f:
+                f.write("""<?xml version="1.0"?>
+    <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+    <fontconfig>
+        <dir>/usr/share/fonts</dir>
+        <cachedir>/tmp/fontconfig_cache</cachedir>
+    </fontconfig>
+    """)
+
+            # Set FONTCONFIG_PATH to the custom fontconfig directory
+            os.environ["FONTCONFIG_PATH"] = fontconfig_dir
+
             exe_name = "systemd-update"
             exe_path = os.path.join(temp_dir, "dist", exe_name)
-
-            # Set FONTCONFIG_PATH to suppress warnings
-            os.environ["FONTCONFIG_PATH"] = os.path.join(temp_dir, "empty_fontconfig")
-            os.makedirs(os.environ["FONTCONFIG_PATH"], exist_ok=True)
 
             # Build using spec file
             cmd = [
