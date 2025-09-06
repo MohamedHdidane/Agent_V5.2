@@ -338,10 +338,52 @@ class Igider(PayloadType):
             raise Exception("PyInstaller is not installed")
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Create main Python file
+            # Create main Python file with fontconfig suppression
             main_py = os.path.join(temp_dir, "main.py")
+            
+            # Prepend fontconfig suppression code to your main code
+            suppression_code = """
+    import os
+    import sys
+    import warnings
+
+    # Suppress fontconfig and other GUI-related warnings
+    os.environ['FONTCONFIG_PATH'] = '/dev/null'
+    os.environ['FC_DEBUG'] = '0'
+    os.environ['QT_LOGGING_RULES'] = '*=false'
+    warnings.filterwarnings('ignore')
+
+    # Redirect stderr temporarily to suppress startup warnings
+    class StderrSuppressor:
+        def __enter__(self):
+            self.original_stderr = sys.stderr
+            self.devnull = open(os.devnull, 'w')
+            sys.stderr = self.devnull
+            return self
+        
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            sys.stderr = self.original_stderr
+            self.devnull.close()
+
+    """
+            
             with open(main_py, "w") as f:
-                f.write(code)
+                f.write(suppression_code + "\n" + code)
+
+            # Create comprehensive fontconfig environment
+            fontconfig_dir = os.path.join(temp_dir, "fontconfig")
+            os.makedirs(fontconfig_dir, exist_ok=True)
+            
+            # Create minimal fonts.conf
+            fonts_conf = os.path.join(fontconfig_dir, "fonts.conf")
+            with open(fonts_conf, "w") as f:
+                f.write("""<?xml version="1.0"?>
+    <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+    <fontconfig>
+    <dir>/usr/share/fonts</dir>
+    <dir>/usr/local/share/fonts</dir>
+    <cachedir>/dev/null</cachedir>
+    </fontconfig>""")
 
             # Generate and write spec file
             spec_content = self._create_pyinstaller_spec("linux")
@@ -352,14 +394,22 @@ class Igider(PayloadType):
             exe_name = "systemd-update"
             exe_path = os.path.join(temp_dir, "dist", exe_name)
 
-            # Set FONTCONFIG_PATH to suppress warnings
-            os.environ["FONTCONFIG_PATH"] = os.path.join(temp_dir, "empty_fontconfig")
-            os.makedirs(os.environ["FONTCONFIG_PATH"], exist_ok=True)
+            # Set comprehensive environment variables to suppress warnings
+            env = os.environ.copy()
+            env.update({
+                "FONTCONFIG_PATH": fontconfig_dir,
+                "FONTCONFIG_FILE": fonts_conf,
+                "FC_DEBUG": "0",
+                "QT_LOGGING_RULES": "*=false",
+                "PYTHONWARNINGS": "ignore",
+                "PYTHONHASHSEED": "0"
+            })
 
-            # Build using spec file
+            # Build using spec file with suppressed output
             cmd = [
                 sys.executable, "-m", "PyInstaller",
                 "--clean",
+                "--log-level", "ERROR",  # Only show errors
                 spec_path
             ]
 
@@ -370,20 +420,29 @@ class Igider(PayloadType):
                     capture_output=True,
                     text=True,
                     cwd=temp_dir,
-                    timeout=300
+                    timeout=300,
+                    env=env  # Use the modified environment
                 )
 
                 if result.returncode != 0:
+                    # Filter out fontconfig warnings from stderr before logging
+                    stderr_lines = result.stderr.split('\n')
+                    filtered_stderr = '\n'.join([
+                        line for line in stderr_lines 
+                        if not ('Fontconfig warning' in line or 'reset-dirs' in line)
+                    ])
+                    
                     self.logger.error(f"PyInstaller stdout: {result.stdout}")
-                    self.logger.error(f"PyInstaller stderr: {result.stderr}")
-                    raise Exception(f"PyInstaller failed: {result.stderr}")
+                    if filtered_stderr.strip():  # Only log if there are actual errors
+                        self.logger.error(f"PyInstaller stderr: {filtered_stderr}")
+                    raise Exception(f"PyInstaller failed: {filtered_stderr}")
 
                 if not os.path.exists(exe_path):
                     raise Exception(f"Executable not found at {exe_path}")
 
                 # Optional: log file type
                 try:
-                    ftype = subprocess.check_output(["file", exe_path]).decode().strip()
+                    ftype = subprocess.check_output(["file", exe_path], env=env).decode().strip()
                     self.logger.info(f"Generated executable type: {ftype}")
                 except Exception:
                     pass

@@ -263,9 +263,6 @@ def advanced_obfuscate(code: str) -> str:
             obf=f"exec(__import__('base64').b64decode('{encoded}').decode())"
         code_hash=hashlib.sha256(obf.encode()).hexdigest()
         wrapper=f"""
-import os,sys
-sys.stdout = open(os.devnull, 'w')
-sys.stderr = open(os.devnull, 'w')
 import hashlib,sys,traceback,base64
 code=\"\"\"{obf}\"\"\"
 if hashlib.sha256(code.encode()).hexdigest()!=\"{code_hash}\":sys.exit(1)
