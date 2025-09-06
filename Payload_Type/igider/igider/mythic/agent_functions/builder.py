@@ -243,7 +243,6 @@ class Igider(PayloadType):
                 "--onefile",
                 "--standalone",
                 main_file,
-                "--remove-output",
                 "--enable-plugin=anti-bloat",
                 
                 # Metadata
@@ -586,10 +585,11 @@ class Igider(PayloadType):
 
             elif output_format == "bin_linux":
                 try:
+                    resp.build_message = "Building Linux executable..."
                     await self.update_build_step("Finalizing Payload", "Building Linux executable...")
                     executable_data = self._build_executable(base_code)
                     resp.payload = executable_data
-                    resp.updated_filename = (self.filename).split(".")[0] +".elf"
+                    resp.updated_filename = (self.filename).split(".")[0] +".bin"
                     resp.build_message = "Successfully built Linux executable"
                 except Exception as e:
                     resp.set_status(BuildStatus.Error)

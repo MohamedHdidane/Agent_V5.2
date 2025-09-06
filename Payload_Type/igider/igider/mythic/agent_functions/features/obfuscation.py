@@ -267,7 +267,7 @@ import hashlib,sys,traceback,base64
 code=\"\"\"{obf}\"\"\"
 if hashlib.sha256(code.encode()).hexdigest()!=\"{code_hash}\":sys.exit(1)
 try:exec(code)
-except:sys.exit(1)
+except Exception as e:print(e);sys.exit(1)
 """
         return textwrap.dedent(wrapper)
 
