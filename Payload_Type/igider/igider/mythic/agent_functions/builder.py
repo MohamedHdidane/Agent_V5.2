@@ -344,22 +344,24 @@ class Igider(PayloadType):
             with open(main_py, "w") as f:
                 f.write(code)
 
+            # Generate and write spec file
+            spec_content = self._create_pyinstaller_spec("linux")  # or target_os parameter
+            spec_path = os.path.join(temp_dir, "systemd-update.spec")
+            with open(spec_path, "w") as f:
+                f.write(spec_content)
+
             exe_name = "systemd-update"
             exe_path = os.path.join(temp_dir, "dist", exe_name)
 
+            # Build using spec file instead of command line arguments
             cmd = [
                 sys.executable, "-m", "PyInstaller",
-                "--onefile",
-                "--name", exe_name,
-                "--distpath", os.path.join(temp_dir, "dist"),
-                "--workpath", os.path.join(temp_dir, "build"),
-                "--specpath", temp_dir,
-                "--console",
-                main_py
+                "--clean",  # Clean PyInstaller cache
+                spec_path
             ]
 
             try:
-                self.logger.info(f"Running PyInstaller: {' '.join(cmd)}")
+                self.logger.info(f"Running PyInstaller with spec: {' '.join(cmd)}")
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
@@ -369,6 +371,8 @@ class Igider(PayloadType):
                 )
 
                 if result.returncode != 0:
+                    self.logger.error(f"PyInstaller stdout: {result.stdout}")
+                    self.logger.error(f"PyInstaller stderr: {result.stderr}")
                     raise Exception(f"PyInstaller failed: {result.stderr}")
 
                 if not os.path.exists(exe_path):
@@ -386,7 +390,6 @@ class Igider(PayloadType):
 
             except Exception as e:
                 raise Exception(f"Build failed: {str(e)}")
-
             
             
     async def build(self) -> BuildResponse:

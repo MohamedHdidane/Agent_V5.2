@@ -1,7 +1,7 @@
 FROM itsafeaturemythic/mythic_python_base:latest
 
 WORKDIR /Mythic/
-
+RUN apt-get update 
 # Install PyInstaller and dependencies for executable building
 RUN pip3 install pyinstaller
 RUN pip3 install --no-cache-dir \
@@ -10,15 +10,6 @@ RUN pip3 install --no-cache-dir \
     cryptography \
     psutil \
     pefile
-
-# Install cross-compilation tools for Windows executables on Linux
-RUN dpkg --add-architecture i386 && \
-    apt-get update && \
-    apt-get install -y \
-    wine \
-    wine32 \
-    wine64 \
-    && rm -rf /var/lib/apt/lists/*
 
 
 
