@@ -9,7 +9,6 @@ RUN pip3 install --no-cache-dir \
     zstandard \
     cryptography \
     psutil \
-    tkinter \
     pefile
 
 
