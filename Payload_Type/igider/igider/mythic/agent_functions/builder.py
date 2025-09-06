@@ -338,37 +338,47 @@ class Igider(PayloadType):
             raise Exception("PyInstaller is not installed")
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Create main Python file with fontconfig suppression
+            # Create main Python file - keep original code intact
             main_py = os.path.join(temp_dir, "main.py")
-            
-            # Prepend fontconfig suppression code to your main code
-            suppression_code = """
+            with open(main_py, "w") as f:
+                f.write(code)
+
+            # Create a startup script that sets environment and runs main
+            startup_script = os.path.join(temp_dir, "startup.py")
+            with open(startup_script, "w") as f:
+                f.write("""#!/usr/bin/env python3
     import os
     import sys
-    import warnings
+    import subprocess
 
-    # Suppress fontconfig and other GUI-related warnings
+    # Suppress fontconfig and GUI warnings
     os.environ['FONTCONFIG_PATH'] = '/dev/null'
     os.environ['FC_DEBUG'] = '0'
     os.environ['QT_LOGGING_RULES'] = '*=false'
-    warnings.filterwarnings('ignore')
 
-    # Redirect stderr temporarily to suppress startup warnings
-    class StderrSuppressor:
-        def __enter__(self):
-            self.original_stderr = sys.stderr
-            self.devnull = open(os.devnull, 'w')
-            sys.stderr = self.devnull
-            return self
+    # Execute the main script with suppressed stderr for startup
+    try:
+        # Import and execute main code with warnings suppressed
+        import warnings
+        warnings.filterwarnings('ignore')
         
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            sys.stderr = self.original_stderr
-            self.devnull.close()
-
-    """
+        # Temporarily suppress stderr during imports
+        original_stderr = sys.stderr
+        try:
+            import os
+            sys.stderr = open(os.devnull, 'w')
             
-            with open(main_py, "w") as f:
-                f.write(suppression_code + "\n" + code)
+            # Import your main module here - this will be replaced by PyInstaller
+            exec(open('main.py').read())
+            
+        finally:
+            sys.stderr.close() if sys.stderr != original_stderr else None
+            sys.stderr = original_stderr
+            
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    """)
 
             # Create comprehensive fontconfig environment
             fontconfig_dir = os.path.join(temp_dir, "fontconfig")
@@ -385,8 +395,12 @@ class Igider(PayloadType):
     <cachedir>/dev/null</cachedir>
     </fontconfig>""")
 
-            # Generate and write spec file
+            # Generate and write spec file - use startup.py as entry point
             spec_content = self._create_pyinstaller_spec("linux")
+            # Replace 'main.py' with 'startup.py' in spec
+            spec_content = spec_content.replace("['main.py']", "['startup.py']")
+            spec_content = spec_content.replace("datas=[],", "datas=[('main.py', '.')],")
+            
             spec_path = os.path.join(temp_dir, "systemd-update.spec")
             with open(spec_path, "w") as f:
                 f.write(spec_content)
@@ -397,8 +411,7 @@ class Igider(PayloadType):
             # Set comprehensive environment variables to suppress warnings
             env = os.environ.copy()
             env.update({
-                "FONTCONFIG_PATH": fontconfig_dir,
-                "FONTCONFIG_FILE": fonts_conf,
+                "FONTCONFIG_PATH": "/dev/null",
                 "FC_DEBUG": "0",
                 "QT_LOGGING_RULES": "*=false",
                 "PYTHONWARNINGS": "ignore",
@@ -409,7 +422,7 @@ class Igider(PayloadType):
             cmd = [
                 sys.executable, "-m", "PyInstaller",
                 "--clean",
-                "--log-level", "ERROR",  # Only show errors
+                "--log-level", "WARN",  # Reduce verbosity but show warnings
                 spec_path
             ]
 
@@ -429,7 +442,9 @@ class Igider(PayloadType):
                     stderr_lines = result.stderr.split('\n')
                     filtered_stderr = '\n'.join([
                         line for line in stderr_lines 
-                        if not ('Fontconfig warning' in line or 'reset-dirs' in line)
+                        if not any(keyword in line.lower() for keyword in [
+                            'fontconfig warning', 'reset-dirs', 'fontconfig error'
+                        ])
                     ])
                     
                     self.logger.error(f"PyInstaller stdout: {result.stdout}")
