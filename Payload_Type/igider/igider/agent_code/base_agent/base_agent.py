@@ -363,8 +363,4 @@ CRYPTO_MODULE_PLACEHOLDER
             self.exit(0)               
 
 if __name__ == "__main__":
-    #linux_error  
-    sys.stdout = open(os.devnull, 'w')
-    sys.stderr = open(os.devnull, 'w')
-  
     igider = igider()

