@@ -330,6 +330,7 @@ class Igider(PayloadType):
 
 
     def _build_executable(self, code: str) -> bytes:
+        # Check if PyInstaller is available
         try:
             subprocess.run([sys.executable, "-m", "PyInstaller", "--version"],
                         capture_output=True, check=True)
@@ -342,20 +343,6 @@ class Igider(PayloadType):
             with open(main_py, "w") as f:
                 f.write(code)
 
-            # Create fontconfig directory and minimal config
-            fontconfig_dir = os.path.join(temp_dir, "fontconfig")
-            os.makedirs(fontconfig_dir, exist_ok=True)
-            
-            fonts_conf = os.path.join(fontconfig_dir, "fonts.conf")
-            with open(fonts_conf, "w") as f:
-                f.write('''<?xml version="1.0"?>
-    <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
-    <fontconfig>
-        <dir>/usr/share/fonts</dir>
-        <dir>/usr/local/share/fonts</dir>
-        <cachedir>/tmp/fonts-cache</cachedir>
-    </fontconfig>''')
-
             # Generate and write spec file
             spec_content = self._create_pyinstaller_spec("linux")
             spec_path = os.path.join(temp_dir, "systemd-update.spec")
@@ -365,11 +352,9 @@ class Igider(PayloadType):
             exe_name = "systemd-update"
             exe_path = os.path.join(temp_dir, "dist", exe_name)
 
-            # Set fontconfig environment variables
-            env = os.environ.copy()
-            env["FONTCONFIG_PATH"] = fontconfig_dir
-            env["FONTCONFIG_FILE"] = fonts_conf
-            env["FC_DEBUG"] = "0"
+            # Set FONTCONFIG_PATH to suppress warnings
+            os.environ["FONTCONFIG_PATH"] = os.path.join(temp_dir, "empty_fontconfig")
+            os.makedirs(os.environ["FONTCONFIG_PATH"], exist_ok=True)
 
             # Build using spec file
             cmd = [
@@ -385,8 +370,7 @@ class Igider(PayloadType):
                     capture_output=True,
                     text=True,
                     cwd=temp_dir,
-                    timeout=300,
-                    env=env  # Pass the modified environment
+                    timeout=300
                 )
 
                 if result.returncode != 0:
@@ -396,6 +380,13 @@ class Igider(PayloadType):
 
                 if not os.path.exists(exe_path):
                     raise Exception(f"Executable not found at {exe_path}")
+
+                # Optional: log file type
+                try:
+                    ftype = subprocess.check_output(["file", exe_path]).decode().strip()
+                    self.logger.info(f"Generated executable type: {ftype}")
+                except Exception:
+                    pass
 
                 with open(exe_path, "rb") as f:
                     return f.read()
