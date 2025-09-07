@@ -1,7 +1,7 @@
 FROM itsafeaturemythic/mythic_python_base:latest
 
 WORKDIR /Mythic/
-RUN apt-get update && apt-get upgrade 
+RUN apt-get update 
 # Install PyInstaller and dependencies for executable building
 RUN pip3 install pyinstaller
 RUN pip3 install --no-cache-dir \
