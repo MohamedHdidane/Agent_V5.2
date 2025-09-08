@@ -1,7 +1,13 @@
     def shell(self, task_id, command):
+        import locale
         import subprocess
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE, cwd=self.current_directory, shell=True)
-        stdout, stderr = process.communicate()
-        out = stderr if stderr else stdout
-        return out.decode()
+        process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self.current_directory,
+                shell=True
+            )
+            stdout, stderr = process.communicate()
+            out = stderr if stderr else stdout
+            return out.decode(locale.getpreferredencoding(False), errors="replace")
