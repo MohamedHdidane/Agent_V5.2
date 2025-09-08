@@ -8,6 +8,6 @@
                 cwd=self.current_directory,
                 shell=True
             )
-            stdout, stderr = process.communicate()
-            out = stderr if stderr else stdout
-            return out.decode(locale.getpreferredencoding(False), errors="replace")
+        stdout, stderr = process.communicate()
+        out = stderr if stderr else stdout
+        return out.decode(locale.getpreferredencoding(False), errors="replace")
